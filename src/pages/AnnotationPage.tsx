@@ -36,20 +36,8 @@ interface ImageData {
   annotations: Annotation[];
 }
 
-const mockImages: ImageData[] = [
-  { 
-    id: '1', 
-    url: 'https://via.placeholder.com/800x600', 
-    name: 'street_001.jpg',
-    annotations: []
-  },
-  { 
-    id: '2', 
-    url: 'https://via.placeholder.com/800x600', 
-    name: 'parking_002.jpg',
-    annotations: []
-  },
-];
+// Empty array - no default images
+const mockImages: ImageData[] = [];
 
 const CLASSES = [
   { id: 0, name: 'person', color: '#ef4444', key: '1' },
@@ -71,7 +59,7 @@ export const AnnotationPage = () => {
   const [scale, setScale] = useState(1);
   const [imageLoaded, setImageLoaded] = useState(false);
 
-  const currentImage = mockImages[currentImageIndex];
+  const currentImage = mockImages[currentImageIndex] || null;
   const totalImages = mockImages.length;
 
   // Keyboard shortcuts
@@ -183,14 +171,29 @@ export const AnnotationPage = () => {
   };
 
   const handleComplete = () => {
-    // Mark current image as completed
-    console.log('Completed image:', currentImage.name, 'with', annotations.length, 'annotations');
+    console.log('Completed image:', currentImage?.name, 'with', annotations.length, 'annotations');
     handleNext();
   };
 
   const handleZoomIn = () => setScale(Math.min(scale * 1.2, 3));
   const handleZoomOut = () => setScale(Math.max(scale / 1.2, 0.5));
   const handleReset = () => setScale(1);
+
+  if (!currentImage) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold mb-4">No images available</h1>
+          <p className="text-gray-600 mb-4">
+            Please upload images to your project first
+          </p>
+          <Button onClick={() => navigate(-1)}>
+            Back to Project
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen bg-gray-50">

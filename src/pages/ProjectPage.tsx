@@ -23,24 +23,13 @@ interface ImageItem {
   uploadDate: string;
 }
 
-const mockImages: ImageItem[] = [
-  { id: '1', name: 'street_001.jpg', url: '/api/images/1', status: 'completed', annotations: 5, size: '2.4 MB', uploadDate: '2024-01-15' },
-  { id: '2', name: 'parking_002.jpg', url: '/api/images/2', status: 'in-progress', annotations: 2, size: '1.8 MB', uploadDate: '2024-01-15' },
-  { id: '3', name: 'highway_003.jpg', url: '/api/images/3', status: 'pending', annotations: 0, size: '3.1 MB', uploadDate: '2024-01-16' },
-  { id: '4', name: 'crosswalk_004.jpg', url: '/api/images/4', status: 'completed', annotations: 8, size: '2.2 MB', uploadDate: '2024-01-16' },
-  { id: '5', name: 'intersection_005.jpg', url: '/api/images/5', status: 'pending', annotations: 0, size: '1.9 MB', uploadDate: '2024-01-17' },
-];
-
 export const ProjectPage = () => {
   const { id } = useParams();
   const { currentProject } = useProject();
   const navigate = useNavigate();
-  const [images, setImages] = useState<ImageItem[]>(mockImages);
+  const [images, setImages] = useState<ImageItem[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
-  // 這裡應該從API獲取實際圖片
-  const sampleImage = "https://via.placeholder.com/800x600";
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -56,13 +45,11 @@ export const ProjectPage = () => {
     setIsDragging(false);
     
     const files = Array.from(e.dataTransfer.files);
-    // Handle file upload logic here
     console.log('Uploading files:', files);
   };
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
-    // Handle file upload logic here
     console.log('Uploading files:', files);
   };
 
@@ -173,7 +160,7 @@ export const ProjectPage = () => {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{completedCount}</div>
-                <Progress value={(completedCount/images.length)*100} className="mt-2" />
+                <Progress value={images.length > 0 ? (completedCount/images.length)*100 : 0} className="mt-2" />
               </CardContent>
             </Card>
             <Card>
@@ -187,40 +174,59 @@ export const ProjectPage = () => {
           </div>
 
           {/* Image Grid */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Image Library</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                {images.map((image) => (
-                  <div key={image.id} className="group relative">
-                    <div className={`border-2 rounded-lg overflow-hidden ${getStatusColor(image.status)}`}>
-                      <div className="aspect-square bg-gray-200 flex items-center justify-center">
-                        <ImageIcon className="h-12 w-12 text-gray-400" />
+          {images.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Image Library</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                  {images.map((image) => (
+                    <div key={image.id} className="group relative">
+                      <div className={`border-2 rounded-lg overflow-hidden ${getStatusColor(image.status)}`}>
+                        <div className="aspect-square bg-gray-200 flex items-center justify-center">
+                          <ImageIcon className="h-12 w-12 text-gray-400" />
+                        </div>
+                        <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-opacity flex items-center justify-center">
+                          <Button 
+                            size="sm" 
+                            onClick={() => navigate(`/annotate/${image.id}`)}
+                            className="opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            Annotate
+                          </Button>
+                        </div>
                       </div>
-                      <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-opacity flex items-center justify-center">
-                        <Button 
-                          size="sm" 
-                          onClick={() => navigate(`/annotate/${image.id}`)}
-                          className="opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                          Annotate
-                        </Button>
+                      <div className="mt-2">
+                        <p className="text-sm font-medium truncate">{image.name}</p>
+                        <div className="flex items-center justify-between mt-1">
+                          {getStatusBadge(image.status)}
+                          <span className="text-xs text-gray-500">{image.annotations} boxes</span>
+                        </div>
                       </div>
                     </div>
-                    <div className="mt-2">
-                      <p className="text-sm font-medium truncate">{image.name}</p>
-                      <div className="flex items-center justify-between mt-1">
-                        {getStatusBadge(image.status)}
-                        <span className="text-xs text-gray-500">{image.annotations} boxes</span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Empty State */}
+          {images.length === 0 && (
+            <Card>
+              <CardContent className="text-center py-12">
+                <ImageIcon className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+                <h3 className="text-lg font-medium mb-2">No images yet</h3>
+                <p className="text-gray-600 mb-4">
+                  Upload your first images to start annotating
+                </p>
+                <Button onClick={() => fileInputRef.current?.click()}>
+                  <Upload className="mr-2 h-4 w-4" />
+                  Upload Images
+                </Button>
+              </CardContent>
+            </Card>
+          )}
         </div>
         
         <div className="space-y-6">
