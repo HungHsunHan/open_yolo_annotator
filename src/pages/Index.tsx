@@ -3,73 +3,66 @@ import { MainLayout } from "@/components/layout/MainLayout";
 import { useProject } from "@/features/project/hooks/useProject";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Plus, Folder } from "lucide-react";
-import { useState } from "react";
+import { Folder, Plus } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { useState } from "react";
+import { CreateProjectDialog } from "@/features/project/components/CreateProjectDialog";
 
 const Index = () => {
   const { projects, createProject } = useProject();
-  const [newProjectName, setNewProjectName] = useState("");
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const navigate = useNavigate();
 
-  const handleCreateProject = () => {
-    if (newProjectName.trim()) {
-      const project = createProject(newProjectName.trim());
-      setNewProjectName("");
-      setIsDialogOpen(false);
-      navigate(`/project/${project.id}`);
-    }
+  const handleCreateProject = (name: string, classes: any[]) => {
+    const project = createProject(name);
+    // Store classes in project or separate storage
+    console.log('Created project with classes:', classes);
+    navigate(`/dashboard`);
   };
 
   return (
     <MainLayout>
       <div className="space-y-6">
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-4xl font-bold text-gray-900 mb-2">YOLO Annotation Tool</h1>
-            <p className="text-lg text-gray-600">
-              Create and manage your YOLO object detection datasets
-            </p>
-          </div>
-          
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="mr-2 h-4 w-4" />
-                New Project
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Create New Project</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4">
-                <div>
-                  <Label htmlFor="projectName">Project Name</Label>
-                  <Input
-                    id="projectName"
-                    value={newProjectName}
-                    onChange={(e) => setNewProjectName(e.target.value)}
-                    placeholder="Enter project name"
-                    onKeyPress={(e) => e.key === 'Enter' && handleCreateProject()}
-                  />
-                </div>
-                <Button onClick={handleCreateProject} className="w-full">
-                  Create Project
-                </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
+        <div className="text-center py-12">
+          <h1 className="text-4xl font-bold text-gray-900 mb-4">YOLO Annotation Tool</h1>
+          <p className="text-lg text-gray-600 mb-8">
+            Create and manage your YOLO object detection datasets with ease
+          </p>
+          <Button size="lg" onClick={() => setIsCreate<dyad-write path="src/pages/Index.tsx" description="Update homepage to use new dashboard and create project dialog">
+import { MadeWithDyad } from "@/components/made-with-dyad";
+import { MainLayout } from "@/components/layout/MainLayout";
+import { useProject } from "@/features/project/hooks/useProject";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Folder, Plus } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { useState } from "react";
+import { CreateProjectDialog } from "@/features/project/components/CreateProjectDialog";
+
+const Index = () => {
+  const { projects, createProject } = useProject();
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const navigate = useNavigate();
+
+  const handleCreateProject = (name: string, classes: any[]) => {
+    const project = createProject(name);
+    // Store classes in project or separate storage
+    console.log('Created project with classes:', classes);
+    navigate(`/dashboard`);
+  };
+
+  return (
+    <MainLayout>
+      <div className="space-y-6">
+        <div className="text-center py-12">
+          <h1 className="text-4xl font-bold text-gray-900 mb-4">YOLO Annotation Tool</h1>
+          <p className="text-lg text-gray-600 mb-8">
+            Create and manage your YOLO object detection datasets with ease
+          </p>
+          <Button size="lg" onClick={() => setIsCreateDialogOpen(true)}>
+            <Plus className="mr-2 h-5 w-5" />
+            Create New Project
+          </Button>
         </div>
 
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -77,7 +70,7 @@ const Index = () => {
             <Card
               key={project.id}
               className="cursor-pointer hover:shadow-lg transition-shadow"
-              onClick={() => navigate(`/project/${project.id}`)}
+              onClick={() => navigate(`/dashboard`)}
             >
               <CardHeader>
                 <CardTitle className="flex items-center">
@@ -104,7 +97,7 @@ const Index = () => {
                 <p className="text-gray-600 mb-4">
                   Get started by creating your first YOLO annotation project
                 </p>
-                <Button onClick={() => setIsDialogOpen(true)}>
+                <Button onClick={() => setIsCreateDialogOpen(true)}>
                   <Plus className="mr-2 h-4 w-4" />
                   Create First Project
                 </Button>
@@ -112,6 +105,12 @@ const Index = () => {
             </Card>
           )}
         </div>
+        
+        <CreateProjectDialog
+          open={isCreateDialogOpen}
+          onOpenChange={setIsCreateDialogOpen}
+          onCreate={handleCreateProject}
+        />
         
         <div className="mt-12">
           <MadeWithDyad />
