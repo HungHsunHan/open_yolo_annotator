@@ -1,26 +1,93 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+
+export interface ImageFile {
+  id: string;
+  name: string;
+  url: string;
+  type: 'image';
+  size: number;
+  uploadDate: Date;
+  status: 'pending' | 'in-progress' | 'completed';
+  annotations: number;
+}
 
 export const useFileManager = (projectId: string) => {
-  const [files, setFiles] = useState<Array<{
-    name: string;
-    type: 'image' | 'label';
-    path: string;
-    lastModified: Date;
-  }>>([]);
+  const [images, setImages] = useState<ImageFile[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Load images from localStorage when project changes
+  useEffect(() => {
+    if (projectId) {
+      const savedImages = localStorage.getItem(`project-${projectId}-images`);
+      if (savedImages) {
+        const parsedImages = JSON.parse(savedImages).map((img: any) => ({
+          ...img,
+          uploadDate: new Date(img.uploadDate)
+        }));
+        setImages(parsedImages);
+      }
+    }
+  }, [projectId]);
+
+  // Save images to localStorage whenever they change
+  useEffect(() => {
+    if (projectId && images.length > 0) {
+      localStorage.setItem(`project-${projectId}-images`, JSON.stringify(images));
+    }
+  }, [images, projectId]);
 
   const uploadFiles = async (files: FileList) => {
-    // 這裡應該實現實際上傳邏輯
-    const newFiles = Array.from(files).map(file => ({
-      name: file.name,
-      type: file.type.startsWith('image/') ? 'image' : 'label',
-      path: `/projects/${projectId}/${file.name}`,
-      lastModified: new Date(file.lastModified)
-    }));
+    setIsLoading(true);
     
-    setFiles(prev => [...prev, ...newFiles]);
+    const newImages: ImageFile[] = Array.from(files)
+      .filter(file => file.type.startsWith('image/'))
+      .map(file => ({
+        id: crypto.randomUUID(),
+        name: file.name,
+        url: URL.createObjectURL(file),
+        type: 'image' as const,
+        size: file.size,
+        uploadDate: new Date(),
+        status: 'pending' as const,
+        annotations: 0
+      }));
+
+    setImages(prev => [...prev, ...newImages]);
+    setIsLoading(false);
   };
 
-  return { files, uploadFiles };
+  const updateImageStatus = (imageId: string, status: ImageFile['status']) => {
+    setImages(prev => prev.map(img => 
+      img.id === imageId ? { ...img, status } : img
+    ));
+  };
+
+  const updateImageAnnotations = (imageId: string, annotations: number) => {
+    setImages(prev => prev.map(img => 
+      img.id === imageId ? { ...img, annotations } : img
+    ));
+  };
+
+  const deleteImage = (imageId: string) => {
+    setImages(prev => prev.filter(img => img.id !== imageId));
+  };
+
+  const clearAllImages = () => {
+    setImages([]);
+    if (projectId) {
+      localStorage.removeItem(`project-${projectId}-images`);
+    }
+  };
+
+  return { 
+    images, 
+    uploadFiles, 
+    updateImageStatus, 
+    updateImageAnnotations, 
+    deleteImage, 
+    clearAllImages,
+    isLoading 
+  };
 };

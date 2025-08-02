@@ -4,30 +4,21 @@ import { useParams, useNavigate } from "react-router-dom";
 import { YoloEditor } from "@/features/annotation/components/YoloEditor";
 import { ClassManager } from "@/features/project/components/ClassManager";
 import { ExportPanel } from "@/features/annotation/components/ExportPanel";
-import { FileUploader } from "@/features/file/components/FileUploader";
 import { useProject } from "@/features/project/hooks/useProject";
+import { useFileManager } from "@/features/file/hooks/useFileManager";
 import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Upload, Image as ImageIcon, CheckCircle2, Clock, Circle } from "lucide-react";
+import { Upload, Image as ImageIcon, CheckCircle2, Clock, Circle, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-
-interface ImageItem {
-  id: string;
-  name: string;
-  url: string;
-  status: 'pending' | 'in-progress' | 'completed';
-  annotations: number;
-  size: string;
-  uploadDate: string;
-}
+import { formatBytes } from "@/lib/utils";
 
 export const ProjectPage = () => {
   const { id } = useParams();
   const { currentProject } = useProject();
   const navigate = useNavigate();
-  const [images, setImages] = useState<ImageItem[]>([]);
+  const { images, uploadFiles, updateImageStatus, deleteImage, isLoading } = useFileManager(id || "");
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -44,13 +35,19 @@ export const ProjectPage = () => {
     e.preventDefault();
     setIsDragging(false);
     
-    const files = Array.from(e.dataTransfer.files);
-    console.log('Uploading files:', files);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      uploadFiles(e.dataTransfer.files);
+    }
   };
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    console.log('Uploading files:', files);
+    if (e.target.files && e.target.files.length > 0) {
+      uploadFiles(e.target.files);
+    }
+  };
+
+  const handleDeleteImage = (imageId: string) => {
+    deleteImage(imageId);
   };
 
   const getStatusIcon = (status: string) => {
@@ -185,23 +182,37 @@ export const ProjectPage = () => {
                     <div key={image.id} className="group relative">
                       <div className={`border-2 rounded-lg overflow-hidden ${getStatusColor(image.status)}`}>
                         <div className="aspect-square bg-gray-200 flex items-center justify-center">
-                          <ImageIcon className="h-12 w-12 text-gray-400" />
+                          <img 
+                            src={image.url} 
+                            alt={image.name} 
+                            className="w-full h-full object-cover"
+                          />
                         </div>
                         <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-opacity flex items-center justify-center">
-                          <Button 
-                            size="sm" 
-                            onClick={() => navigate(`/annotate/${image.id}`)}
-                            className="opacity-0 group-hover:opacity-100 transition-opacity"
-                          >
-                            Annotate
-                          </Button>
+                          <div className="space-x-2">
+                            <Button 
+                              size="sm" 
+                              onClick={() => navigate(`/annotate/${image.id}`)}
+                              className="opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                              Annotate
+                            </Button>
+                            <Button 
+                              size="sm" 
+                              variant="destructive"
+                              onClick={() => handleDeleteImage(image.id)}
+                              className="opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </div>
                       </div>
                       <div className="mt-2">
                         <p className="text-sm font-medium truncate">{image.name}</p>
                         <div className="flex items-center justify-between mt-1">
                           {getStatusBadge(image.status)}
-                          <span className="text-xs text-gray-500">{image.annotations} boxes</span>
+                          <span className="text-xs text-gray-500">{formatBytes(image.size)}</span>
                         </div>
                       </div>
                     </div>
