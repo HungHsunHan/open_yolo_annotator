@@ -4,7 +4,6 @@ import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { 
   Home, 
-  FolderOpen, 
   Image, 
   Users, 
   Settings,
@@ -22,7 +21,6 @@ export const Sidebar = () => {
 
   const navItems = [
     { name: "Dashboard", href: "/", icon: Home },
-    { name: "Projects", href: "/projects", icon: FolderOpen },
     { name: "Images", href: "/images", icon: Image },
     { name: "Team", href: "/team", icon: Users },
     { name: "Settings", href: "/settings", icon: Settings },
