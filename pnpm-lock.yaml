@@ -8,6 +8,12 @@ importers:
 
   .:
     dependencies:
+      '@azure/msal-browser':
+        specifier: ^4.18.0
+        version: 4.18.0
+      '@azure/msal-react':
+        specifier: ^3.0.16
+        version: 3.0.16(@azure/msal-browser@4.18.0)(react@18.3.1)
       '@hookform/resolvers':
         specifier: ^3.9.0
         version: 3.10.0(react-hook-form@7.55.0(react@18.3.1))
@@ -213,6 +219,21 @@ packages:
   '@alloc/quick-lru@5.2.0':
     resolution: {integrity: sha512-UrcABB+4bUrFABwbluTIBErXwvbsU/V7TZWfmbgJfbkwiBuziS9gxdODUyuiecfdGQ85jglMW6juS3+z5TsKLw==}
     engines: {node: '>=10'}
+
+  '@azure/msal-browser@4.18.0':
+    resolution: {integrity: sha512-esQwdtHHVkFJhcKWnysnCTchiKsy3dmNZGs8AckD9PO3t8Lp5VtY0xcrbCBC0JbttG/5w2/xukUQOsMpoUFKrg==}
+    engines: {node: '>=0.8.0'}
+
+  '@azure/msal-common@15.9.0':
+    resolution: {integrity: sha512-lbz/D+C9ixUG3hiZzBLjU79a0+5ZXCorjel3mwXluisKNH0/rOS/ajm8yi4yI9RP5Uc70CAcs9Ipd0051Oh/kA==}
+    engines: {node: '>=0.8.0'}
+
+  '@azure/msal-react@3.0.16':
+    resolution: {integrity: sha512-fIFc3z9UrHoOCG4rApNWMRr83DnQlo+CHfLSPNBQa4rndIkr+XYBpdYDqlzqtmikRf3A+CYNVOQ+lQX6jM0zdw==}
+    engines: {node: '>=10'}
+    peerDependencies:
+      '@azure/msal-browser': ^4.16.0
+      react: ^16.8.0 || ^17 || ^18 || ^19
 
   '@babel/helper-string-parser@7.27.1':
     resolution: {integrity: sha512-qMlSxKbpRlAridDExk92nSobyDdpPijUq2DW6oDnUqd0iOGxmQjyqhMIihI9+zv4LPyZdRje2cavWPbCbWm3eA==}
@@ -2463,6 +2484,17 @@ packages:
 snapshots:
 
   '@alloc/quick-lru@5.2.0': {}
+
+  '@azure/msal-browser@4.18.0':
+    dependencies:
+      '@azure/msal-common': 15.9.0
+
+  '@azure/msal-common@15.9.0': {}
+
+  '@azure/msal-react@3.0.16(@azure/msal-browser@4.18.0)(react@18.3.1)':
+    dependencies:
+      '@azure/msal-browser': 4.18.0
+      react: 18.3.1
 
   '@babel/helper-string-parser@7.27.1': {}
 
