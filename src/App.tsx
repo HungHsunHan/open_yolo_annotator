@@ -7,6 +7,8 @@ import NotFound from "./pages/NotFound";
 import { AuthProvider } from "./auth/AuthProvider";
 import { MainLayout } from "./components/layout/MainLayout";
 import { ProjectPage } from "./pages/ProjectPage";
+import { ProjectsPage } from "./pages/ProjectsPage";
+import { ImagesPage } from "./pages/ImagesPage";
 
 const queryClient = new QueryClient();
 
@@ -18,6 +20,16 @@ const App = () => (
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<Index />} />
+            <Route path="/projects" element={
+              <MainLayout>
+                <ProjectsPage />
+              </MainLayout>
+            } />
+            <Route path="/images" element={
+              <MainLayout>
+                <ImagesPage />
+              </MainLayout>
+            } />
             <Route path="/project/:id" element={
               <MainLayout>
                 <ProjectPage />
