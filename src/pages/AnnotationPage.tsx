@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useParams, useNavigate, useLocation } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -17,7 +17,6 @@ import {
   RotateCcw,
   ArrowLeft
 } from "lucide-react";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useFileManager } from "@/features/file/hooks/useFileManager";
 
 interface Annotation {
@@ -41,8 +40,13 @@ const CLASSES = [
 export const AnnotationPage = () => {
   const { imageId } = useParams();
   const navigate = useNavigate();
-  const location = useLocation();
-  const { images, updateImageStatus, updateImageAnnotations } = useFileManager(location.pathname.split('/')[2] || "");
+  
+  // Get project ID from URL - use the current path structure
+  const pathParts = window.location.pathname.split('/');
+  const projectId = pathParts[2]; // /annotate/:projectId/:imageId or /annotate/:imageId
+  
+  // Use file manager with the correct project ID
+  const { images, updateImageStatus, updateImageAnnotations } = useFileManager(projectId || "");
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [isDrawing, setIsDrawing] = useState(false);
@@ -50,11 +54,19 @@ export const AnnotationPage = () => {
   const [currentBox, setCurrentBox] = useState<Annotation | null>(null);
   const [selectedClass, setSelectedClass] = useState(0);
   const [scale, setScale] = useState(1);
-  const [imageLoaded, setImageLoaded] = useState(false);
 
+  // Find current image
   const currentImageIndex = images.findIndex(img => img.id === imageId);
   const currentImage = images[currentImageIndex] || null;
   const totalImages = images.length;
+
+  // Debug logging
+  useEffect(() => {
+    console.log('Project ID:', projectId);
+    console.log('Image ID:', imageId);
+    console.log('Available images:', images.length);
+    console.log('Images:', images);
+  }, [projectId, imageId, images]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -173,13 +185,21 @@ export const AnnotationPage = () => {
     if (currentImageIndex < totalImages - 1) {
       handleNext();
     } else {
-      navigate(`/project/${location.pathname.split('/')[2]}`);
+      navigate(`/project/${projectId}`);
     }
   };
 
   const handleZoomIn = () => setScale(Math.min(scale * 1.2, 3));
   const handleZoomOut = () => setScale(Math.max(scale / 1.2, 0.5));
   const handleReset = () => setScale(1);
+
+  if (!currentImage && images.length > 0) {
+    // If we have images but current image not found, redirect to first image
+    if (images.length > 0) {
+      navigate(`/annotate/${images[0].id}`, { replace: true });
+      return null;
+    }
+  }
 
   if (!currentImage) {
     return (
@@ -189,7 +209,7 @@ export const AnnotationPage = () => {
           <p className="text-gray-600 mb-4">
             Please upload images to your project first
           </p>
-          <Button onClick={() => navigate(-1)}>
+          <Button onClick={() => navigate(`/project/${projectId}`)}>
             <ArrowLeft className="mr-2 h-4 w-4" />
             Back to Project
           </Button>
@@ -238,7 +258,7 @@ export const AnnotationPage = () => {
         {/* Top Toolbar */}
         <div className="bg-white border-b px-4 py-3 flex items-center justify-between">
           <div className="flex items-center space-x-4">
-            <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>
+            <Button variant="ghost" size="sm" onClick={() => navigate(`/project/${projectId}`)}>
               <ArrowLeft className="h-4 w-4" />
             </Button>
             <h2 className="font-semibold">{currentImage.name}</h2>
@@ -292,7 +312,7 @@ export const AnnotationPage = () => {
           </div>
           
           <div className="flex items-center space-x-2">
-            <Button variant="outline" onClick={() => navigate(`/project/${location.pathname.split('/')[2]}`)}>
+            <Button variant="outline" onClick={() => navigate(`/project/${projectId}`)}>
               <SkipForward className="h-4 w-4 mr-1" />
               Skip
             </Button>

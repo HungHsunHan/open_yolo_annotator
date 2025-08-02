@@ -55,8 +55,12 @@ export const ProjectPage = () => {
 
   const handleReviewImages = () => {
     if (images.length > 0) {
-      navigate(`/annotate/${images[0].id}`);
+      navigate(`/project/${id}/annotate/${images[0].id}`);
     }
+  };
+
+  const handleAnnotateImage = (imageId: string) => {
+    navigate(`/project/${id}/annotate/${imageId}`);
   };
 
   const getStatusIcon = (status: string) => {
@@ -217,7 +221,7 @@ export const ProjectPage = () => {
                           <div className="space-x-2">
                             <Button 
                               size="sm" 
-                              onClick={() => navigate(`/annotate/${image.id}`)}
+                              onClick={() => handleAnnotateImage(image.id)}
                               className="opacity-0 group-hover:opacity-100 transition-opacity"
                             >
                               Annotate

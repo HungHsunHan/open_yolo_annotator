@@ -32,6 +32,9 @@ const App = () => (
           <Route path="/annotate/:imageId" element={
             <AnnotationPage />
           } />
+          <Route path="/project/:id/annotate/:imageId" element={
+            <AnnotationPage />
+          } />
           <Route path="/project/:id" element={
             <MainLayout>
               <ProjectPage />
