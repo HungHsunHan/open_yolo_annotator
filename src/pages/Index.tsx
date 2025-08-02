@@ -15,38 +15,6 @@ const Index = () => {
 
   const handleCreateProject = (name: string, classes: any[]) => {
     const project = createProject(name);
-    // Store classes in project or separate storage
-    console.log('Created project with classes:', classes);
-    navigate(`/dashboard`);
-  };
-
-  return (
-    <MainLayout>
-      <div className="space-y-6">
-        <div className="text-center py-12">
-          <h1 className="text-4xl font-bold text-gray-900 mb-4">YOLO Annotation Tool</h1>
-          <p className="text-lg text-gray-600 mb-8">
-            Create and manage your YOLO object detection datasets with ease
-          </p>
-          <Button size="lg" onClick={() => setIsCreate<dyad-write path="src/pages/Index.tsx" description="Update homepage to use new dashboard and create project dialog">
-import { MadeWithDyad } from "@/components/made-with-dyad";
-import { MainLayout } from "@/components/layout/MainLayout";
-import { useProject } from "@/features/project/hooks/useProject";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Folder, Plus } from "lucide-react";
-import { useNavigate } from "react-router-dom";
-import { useState } from "react";
-import { CreateProjectDialog } from "@/features/project/components/CreateProjectDialog";
-
-const Index = () => {
-  const { projects, createProject } = useProject();
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const navigate = useNavigate();
-
-  const handleCreateProject = (name: string, classes: any[]) => {
-    const project = createProject(name);
-    // Store classes in project or separate storage
     console.log('Created project with classes:', classes);
     navigate(`/dashboard`);
   };
