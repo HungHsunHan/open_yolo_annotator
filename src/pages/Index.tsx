@@ -13,9 +13,9 @@ const Index = () => {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const navigate = useNavigate();
 
-  const handleCreateProject = (name: string, classes: any[]) => {
-    const project = createProject(name);
-    console.log('Created project with classes:', classes);
+  const handleCreateProject = (name: string, classes: string[]) => {
+    const project = createProject(name, classes);
+    console.log('Created project:', project);
     navigate(`/dashboard`);
   };
 
@@ -51,7 +51,7 @@ const Index = () => {
                   Created: {project.createdAt.toLocaleDateString()}
                 </p>
                 <p className="text-sm text-gray-600">
-                  Classes: {project.classNames.length || 1}
+                  Classes: {project.classNames.length}
                 </p>
               </CardContent>
             </Card>

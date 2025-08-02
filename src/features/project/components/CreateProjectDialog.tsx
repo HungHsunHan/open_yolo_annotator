@@ -29,7 +29,7 @@ export const CreateProjectDialog = ({
 }: { 
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onCreate: (name: string, classes: ClassDefinition[]) => void;
+  onCreate: (name: string, classes: string[]) => void;
 }) => {
   const [projectName, setProjectName] = useState("");
   const [classes, setClasses] = useState<ClassDefinition[]>([
@@ -38,7 +38,7 @@ export const CreateProjectDialog = ({
   const [newClassName, setNewClassName] = useState("");
 
   const addClass = () => {
-    if (newClassName.trim() && classes.length < 9) {
+    if (newClassName.trim() && !classes.some(c => c.name === newClassName.trim()) && classes.length < 9) {
       const newClass: ClassDefinition = {
         id: classes.length,
         name: newClassName.trim(),
@@ -58,9 +58,17 @@ export const CreateProjectDialog = ({
 
   const handleCreate = () => {
     if (projectName.trim() && classes.length > 0) {
-      onCreate(projectName, classes);
+      const classNames = classes.map(c => c.name);
+      onCreate(projectName, classNames);
       setProjectName("");
       setClasses([{ id: 0, name: "person", color: COLORS[0], key: "1" }]);
+      onOpenChange(false);
+    }
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      addClass();
     }
   };
 
@@ -98,7 +106,12 @@ export const CreateProjectDialog = ({
                   <span className="w-8 text-center font-mono">{cls.key}</span>
                   <Input 
                     value={cls.name} 
-                    readOnly 
+                    onChange={(e) => {
+                      const updatedClasses = classes.map(c => 
+                        c.id === cls.id ? { ...c, name: e.target.value } : c
+                      );
+                      setClasses(updatedClasses);
+                    }}
                     className="flex-1"
                   />
                   <Button
@@ -119,7 +132,7 @@ export const CreateProjectDialog = ({
                   value={newClassName}
                   onChange={(e) => setNewClassName(e.target.value)}
                   placeholder="Add new class"
-                  onKeyPress={(e) => e.key === 'Enter' && addClass()}
+                  onKeyPress={handleKeyPress}
                 />
                 <Button onClick={addClass} size="sm">
                   <Plus className="h-4 w-4" />
