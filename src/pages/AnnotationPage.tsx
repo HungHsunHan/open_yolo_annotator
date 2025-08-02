@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -14,9 +14,11 @@ import {
   Trash2,
   ZoomIn,
   ZoomOut,
-  RotateCcw
+  RotateCcw,
+  ArrowLeft
 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useFileManager } from "@/features/file/hooks/useFileManager";
 
 interface Annotation {
   id: string;
@@ -29,16 +31,6 @@ interface Annotation {
   height: number;
 }
 
-interface ImageData {
-  id: string;
-  url: string;
-  name: string;
-  annotations: Annotation[];
-}
-
-// Empty array - no default images
-const mockImages: ImageData[] = [];
-
 const CLASSES = [
   { id: 0, name: 'person', color: '#ef4444', key: '1' },
   { id: 1, name: 'car', color: '#3b82f6', key: '2' },
@@ -49,8 +41,9 @@ const CLASSES = [
 export const AnnotationPage = () => {
   const { imageId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const { images, updateImageStatus, updateImageAnnotations } = useFileManager(location.pathname.split('/')[2] || "");
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [isDrawing, setIsDrawing] = useState(false);
   const [startPoint, setStartPoint] = useState({ x: 0, y: 0 });
@@ -59,8 +52,9 @@ export const AnnotationPage = () => {
   const [scale, setScale] = useState(1);
   const [imageLoaded, setImageLoaded] = useState(false);
 
-  const currentImage = mockImages[currentImageIndex] || null;
-  const totalImages = mockImages.length;
+  const currentImageIndex = images.findIndex(img => img.id === imageId);
+  const currentImage = images[currentImageIndex] || null;
+  const totalImages = images.length;
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -102,7 +96,7 @@ export const AnnotationPage = () => {
 
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [currentImageIndex, currentBox]);
+  }, [currentImageIndex, currentBox, images]);
 
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
@@ -158,21 +152,29 @@ export const AnnotationPage = () => {
 
   const handlePrevious = () => {
     if (currentImageIndex > 0) {
-      setCurrentImageIndex(currentImageIndex - 1);
-      setAnnotations([]);
+      const prevImage = images[currentImageIndex - 1];
+      navigate(`/annotate/${prevImage.id}`);
     }
   };
 
   const handleNext = () => {
     if (currentImageIndex < totalImages - 1) {
-      setCurrentImageIndex(currentImageIndex + 1);
-      setAnnotations([]);
+      const nextImage = images[currentImageIndex + 1];
+      navigate(`/annotate/${nextImage.id}`);
     }
   };
 
   const handleComplete = () => {
-    console.log('Completed image:', currentImage?.name, 'with', annotations.length, 'annotations');
-    handleNext();
+    if (currentImage) {
+      updateImageStatus(currentImage.id, 'completed');
+      updateImageAnnotations(currentImage.id, annotations.length);
+    }
+    
+    if (currentImageIndex < totalImages - 1) {
+      handleNext();
+    } else {
+      navigate(`/project/${location.pathname.split('/')[2]}`);
+    }
   };
 
   const handleZoomIn = () => setScale(Math.min(scale * 1.2, 3));
@@ -188,6 +190,7 @@ export const AnnotationPage = () => {
             Please upload images to your project first
           </p>
           <Button onClick={() => navigate(-1)}>
+            <ArrowLeft className="mr-2 h-4 w-4" />
             Back to Project
           </Button>
         </div>
@@ -235,6 +238,9 @@ export const AnnotationPage = () => {
         {/* Top Toolbar */}
         <div className="bg-white border-b px-4 py-3 flex items-center justify-between">
           <div className="flex items-center space-x-4">
+            <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
             <h2 className="font-semibold">{currentImage.name}</h2>
             <span className="text-sm text-gray-600">
               {currentImageIndex + 1} / {totalImages}
@@ -286,7 +292,7 @@ export const AnnotationPage = () => {
           </div>
           
           <div className="flex items-center space-x-2">
-            <Button variant="outline" onClick={() => navigate('/images')}>
+            <Button variant="outline" onClick={() => navigate(`/project/${location.pathname.split('/')[2]}`)}>
               <SkipForward className="h-4 w-4 mr-1" />
               Skip
             </Button>
@@ -302,12 +308,12 @@ export const AnnotationPage = () => {
       <div className="w-48 bg-white border-l p-4">
         <h3 className="font-semibold mb-4">Images</h3>
         <div className="space-y-2">
-          {mockImages.map((img, index) => (
+          {images.map((img, index) => (
             <button
               key={img.id}
-              onClick={() => setCurrentImageIndex(index)}
+              onClick={() => navigate(`/annotate/${img.id}`)}
               className={`w-full p-2 rounded border transition-colors ${
-                index === currentImageIndex ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
+                img.id === imageId ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
               }`}
             >
               <div className="aspect-square bg-gray-200 rounded mb-1" />

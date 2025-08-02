@@ -9,7 +9,7 @@ import { useFileManager } from "@/features/file/hooks/useFileManager";
 import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Upload, Image as ImageIcon, CheckCircle2, Clock, Circle, Trash2 } from "lucide-react";
+import { Upload, Image as ImageIcon, CheckCircle2, Clock, Circle, Trash2, Eye } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { formatBytes } from "@/lib/utils";
@@ -20,7 +20,10 @@ export const ProjectPage = () => {
   const navigate = useNavigate();
   const { images, uploadFiles, updateImageStatus, deleteImage, isLoading } = useFileManager(id || "");
   const [isDragging, setIsDragging] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  const IMAGES_PER_PAGE = 8;
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -48,6 +51,12 @@ export const ProjectPage = () => {
 
   const handleDeleteImage = (imageId: string) => {
     deleteImage(imageId);
+  };
+
+  const handleReviewImages = () => {
+    if (images.length > 0) {
+      navigate(`/annotate/${images[0].id}`);
+    }
   };
 
   const getStatusIcon = (status: string) => {
@@ -81,6 +90,16 @@ export const ProjectPage = () => {
       default:
         return <Badge variant="outline">Pending</Badge>;
     }
+  };
+
+  // Pagination logic
+  const totalPages = Math.ceil(images.length / IMAGES_PER_PAGE);
+  const startIndex = (currentPage - 1) * IMAGES_PER_PAGE;
+  const endIndex = startIndex + IMAGES_PER_PAGE;
+  const currentImages = images.slice(startIndex, endIndex);
+
+  const goToPage = (page: number) => {
+    setCurrentPage(Math.max(1, Math.min(page, totalPages)));
   };
 
   const completedCount = images.filter(img => img.status === 'completed').length;
@@ -170,15 +189,21 @@ export const ProjectPage = () => {
             </Card>
           </div>
 
-          {/* Image Grid */}
+          {/* Image Library */}
           {images.length > 0 && (
             <Card>
               <CardHeader>
-                <CardTitle>Image Library</CardTitle>
+                <div className="flex justify-between items-center">
+                  <CardTitle>Image Library</CardTitle>
+                  <Button onClick={handleReviewImages} disabled={images.length === 0}>
+                    <Eye className="mr-2 h-4 w-4" />
+                    Start Review
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                  {images.map((image) => (
+                  {currentImages.map((image) => (
                     <div key={image.id} className="group relative">
                       <div className={`border-2 rounded-lg overflow-hidden ${getStatusColor(image.status)}`}>
                         <div className="aspect-square bg-gray-200 flex items-center justify-center">
@@ -218,6 +243,40 @@ export const ProjectPage = () => {
                     </div>
                   ))}
                 </div>
+
+                {/* Pagination */}
+                {totalPages > 1 && (
+                  <div className="flex justify-center items-center space-x-2 mt-6">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => goToPage(currentPage - 1)}
+                      disabled={currentPage === 1}
+                    >
+                      Previous
+                    </Button>
+                    
+                    {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                      <Button
+                        key={page}
+                        variant={currentPage === page ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => goToPage(page)}
+                      >
+                        {page}
+                      </Button>
+                    ))}
+                    
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => goToPage(currentPage + 1)}
+                      disabled={currentPage === totalPages}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}
