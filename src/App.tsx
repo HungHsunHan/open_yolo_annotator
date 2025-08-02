@@ -7,7 +7,7 @@ import NotFound from "./pages/NotFound";
 import { MainLayout } from "./components/layout/MainLayout";
 import { ProjectPage } from "./pages/ProjectPage";
 import { ImagesPage } from "./pages/ImagesPage";
-import { DashboardPage } from "./pages/DashboardPage";
+import DashboardPage from "./pages/DashboardPage";
 import { AnnotationPage } from "./pages/AnnotationPage";
 
 const queryClient = new QueryClient();
