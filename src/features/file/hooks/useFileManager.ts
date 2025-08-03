@@ -22,11 +22,16 @@ export const useFileManager = (projectId: string) => {
     if (projectId) {
       const savedImages = localStorage.getItem(`project-${projectId}-images`);
       if (savedImages) {
-        const parsedImages = JSON.parse(savedImages).map((img: any) => ({
-          ...img,
-          uploadDate: new Date(img.uploadDate)
-        }));
-        setImages(parsedImages);
+        try {
+          const parsedImages = JSON.parse(savedImages).map((img: any) => ({
+            ...img,
+            uploadDate: new Date(img.uploadDate)
+          }));
+          setImages(parsedImages);
+        } catch (e) {
+          console.error("Failed to parse saved images:", e);
+          setImages([]);
+        }
       }
     }
   }, [projectId]);
@@ -34,52 +39,53 @@ export const useFileManager = (projectId: string) => {
   // Save images to localStorage whenever they change
   useEffect(() => {
     if (projectId && images.length > 0) {
-      localStorage.setItem(`project-${projectId}-images`, JSON.stringify(images));
+      try {
+        localStorage.setItem(`project-${projectId}-images`, JSON.stringify(images));
+      } catch (e) {
+        console.error("Failed to save images:", e);
+      }
+    } else if (projectId) {
+      // Clear storage if no images
+      localStorage.removeItem(`project-${projectId}-images`);
     }
   }, [images, projectId]);
 
   const uploadFiles = async (files: FileList) => {
     setIsLoading(true);
     
-    const newImages: ImageFile[] = Array.from(files)
-      .filter(file => file.type.startsWith('image/'))
-      .map(file => {
+    const validFiles = Array.from(files).filter(file => file.type.startsWith('image/'));
+    
+    for (const file of validFiles) {
+      try {
         // Convert file to base64 for persistence
-        const reader = new FileReader();
-        reader.readAsDataURL(file);
-        
-        return {
+        const base64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            if (e.target?.result) {
+              resolve(e.target.result as string);
+            } else {
+              reject(new Error("Failed to read file"));
+            }
+          };
+          reader.onerror = () => reject(new Error("File read error"));
+          reader.readAsDataURL(file);
+        });
+
+        const newImage: ImageFile = {
           id: crypto.randomUUID(),
           name: file.name,
-          url: URL.createObjectURL(file), // Temporary URL for immediate use
+          url: base64, // Use base64 for persistence
           type: 'image' as const,
           size: file.size,
           uploadDate: new Date(),
           status: 'pending' as const,
           annotations: 0
         };
-      });
 
-    // Convert files to base64 for persistence
-    for (const file of Array.from(files).filter(file => file.type.startsWith('image/'))) {
-      const base64 = await new Promise<string>((resolve) => {
-        const reader = new FileReader();
-        reader.onload = (e) => resolve(e.target?.result as string);
-        reader.readAsDataURL(file);
-      });
-
-      const newImage: ImageFile = {
-        id: crypto.randomUUID(),
-        name: file.name,
-        url: base64, // Use base64 for persistence
-        type: 'image' as const,
-        size: file.size,
-        uploadDate: new Date(),
-        status: 'pending' as const,
-        annotations: 0
-      };
-
-      setImages(prev => [...prev, newImage]);
+        setImages(prev => [...prev, newImage]);
+      } catch (error) {
+        console.error("Error processing file:", file.name, error);
+      }
     }
     
     setIsLoading(false);
@@ -103,9 +109,6 @@ export const useFileManager = (projectId: string) => {
 
   const clearAllImages = () => {
     setImages([]);
-    if (projectId) {
-      localStorage.removeItem(`project-${projectId}-images`);
-    }
   };
 
   return { 

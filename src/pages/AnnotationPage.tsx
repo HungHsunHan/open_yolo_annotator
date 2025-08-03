@@ -74,8 +74,8 @@ export const AnnotationPage = () => {
       setImageDimensions({ width: img.width, height: img.height });
       
       // Calculate scale to fit image in viewport
-      const maxWidth = 800;
-      const maxHeight = 600;
+      const maxWidth = window.innerWidth * 0.6;
+      const maxHeight = window.innerHeight * 0.7;
       const scaleX = maxWidth / img.width;
       const scaleY = maxHeight / img.height;
       const newScale = Math.min(scaleX, scaleY, 1);
@@ -91,6 +91,17 @@ export const AnnotationPage = () => {
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
       
       setImageLoaded(true);
+    };
+    
+    img.onerror = (e) => {
+      console.error("Failed to load image:", currentImage.name, e);
+      // Set a placeholder image
+      ctx.fillStyle = "#f0f0f0";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "#999";
+      ctx.font = "20px Arial";
+      ctx.textAlign = "center";
+      ctx.fillText("Failed to load image", canvas.width/2, canvas.height/2);
     };
     
     img.src = currentImage.url;
@@ -141,7 +152,7 @@ export const AnnotationPage = () => {
 
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas || !imageLoaded) return;
 
     const rect = canvas.getBoundingClientRect();
     const x = (e.clientX - rect.left) / scale;
@@ -153,7 +164,7 @@ export const AnnotationPage = () => {
   };
 
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isDrawing || !canvasRef.current || !imageRef.current) return;
+    if (!isDrawing || !canvasRef.current || !imageRef.current || !imageLoaded) return;
 
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
@@ -393,6 +404,10 @@ export const AnnotationPage = () => {
                   src={img.url} 
                   alt={img.name} 
                   className="w-full h-full object-cover rounded"
+                  onError={(e) => {
+                    const target = e.target as HTMLImageElement;
+                    target.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 24 24' fill='none' stroke='%23ccc' stroke-width='2'%3E%3Crect x='3' y='3' width='18' height='18' rx='2' ry='2'/%3E%3Ccircle cx='8.5' cy='8.5' r='1.5'/%3E%3Cpath d='M21 15l-5-5L5 21'/%3E%3C/svg%3E";
+                  }}
                 />
               </div>
               <p className="text-xs truncate">{img.name}</p>
