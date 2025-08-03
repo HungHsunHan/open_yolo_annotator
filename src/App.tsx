@@ -9,41 +9,72 @@ import { ProjectPage } from "./pages/ProjectPage";
 import ImagesPage from "./pages/ImagesPage";
 import DashboardPage from "./pages/DashboardPage";
 import { AnnotationPage } from "./pages/AnnotationPage";
+import { LoginPage } from "./pages/LoginPage";
+import SettingsPage from "./pages/SettingsPage";
+import { AuthProvider } from "./auth/AuthProvider";
+import { ProtectedRoute } from "./components/ProtectedRoute";
+import { ThemeProvider } from "./contexts/ThemeProvider";
 
 const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Index />} />
-          <Route path="/dashboard" element={
-            <MainLayout>
-              <DashboardPage />
-            </MainLayout>
-          } />
-          <Route path="/images" element={
-            <MainLayout>
-              <ImagesPage />
-            </MainLayout>
-          } />
-          <Route path="/annotate/:imageId" element={
-            <AnnotationPage />
-          } />
-          <Route path="/project/:id/annotate/:imageId" element={
-            <AnnotationPage />
-          } />
-          <Route path="/project/:id" element={
-            <MainLayout>
-              <ProjectPage />
-            </MainLayout>
-          } />
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
-    </TooltipProvider>
+    <ThemeProvider defaultTheme="system" storageKey="yolo-annotator-theme">
+      <AuthProvider>
+        <TooltipProvider>
+          <Toaster />
+          <BrowserRouter>
+            <Routes>
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/" element={
+                <ProtectedRoute>
+                  <Index />
+                </ProtectedRoute>
+              } />
+              <Route path="/dashboard" element={
+                <ProtectedRoute>
+                  <MainLayout>
+                    <DashboardPage />
+                  </MainLayout>
+                </ProtectedRoute>
+              } />
+              <Route path="/settings" element={
+                <ProtectedRoute>
+                  <MainLayout>
+                    <SettingsPage />
+                  </MainLayout>
+                </ProtectedRoute>
+              } />
+              <Route path="/images" element={
+                <ProtectedRoute>
+                  <MainLayout>
+                    <ImagesPage />
+                  </MainLayout>
+                </ProtectedRoute>
+              } />
+              <Route path="/annotate/:imageId" element={
+                <ProtectedRoute>
+                  <AnnotationPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/project/:id/annotate/:imageId" element={
+                <ProtectedRoute>
+                  <AnnotationPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/project/:id" element={
+                <ProtectedRoute>
+                  <MainLayout>
+                    <ProjectPage />
+                  </MainLayout>
+                </ProtectedRoute>
+              } />
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </BrowserRouter>
+        </TooltipProvider>
+      </AuthProvider>
+    </ThemeProvider>
   </QueryClientProvider>
 );
 

@@ -13,11 +13,13 @@ import { Upload, Image as ImageIcon, CheckCircle2, Clock, Circle, Trash2, Eye } 
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { formatBytes } from "@/lib/utils";
+import { useRoles } from "@/auth/useRoles";
 
 export const ProjectPage = () => {
   const { id } = useParams();
   const { projects } = useProject();
   const navigate = useNavigate();
+  const { canDeleteImages } = useRoles();
   
   // Find the current project by URL ID, not the globally selected project
   const currentProject = projects.find(p => p.id === id);
@@ -284,14 +286,16 @@ export const ProjectPage = () => {
                             >
                               Annotate
                             </Button>
-                            <Button 
-                              size="sm" 
-                              variant="destructive"
-                              onClick={() => handleDeleteImage(image.id)}
-                              className="opacity-0 group-hover:opacity-100 transition-opacity"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
+                            {canDeleteImages && (
+                              <Button 
+                                size="sm" 
+                                variant="destructive"
+                                onClick={() => handleDeleteImage(image.id)}
+                                className="opacity-0 group-hover:opacity-100 transition-opacity"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            )}
                           </div>
                         </div>
                       </div>

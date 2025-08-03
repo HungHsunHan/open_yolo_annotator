@@ -10,11 +10,14 @@ import { useState, useEffect } from "react";
 import { DeleteProjectDialog } from "@/components/DeleteProjectDialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
+import { AdminOnlyFeature } from "@/components/AdminOnlyFeature";
+import { useRoles } from "@/auth/useRoles";
 
 const DashboardPage = () => {
   const { projects, createProject, deleteProject } = useProject();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { canDeleteProject } = useRoles();
   const [projectStats, setProjectStats] = useState<{[key: string]: {totalImages: number, completedImages: number, totalAnnotations: number}}>({});
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [projectToDelete, setProjectToDelete] = useState<{id: string, name: string} | null>(null);
@@ -71,10 +74,12 @@ const DashboardPage = () => {
           <h1 className="text-3xl font-bold">Dashboard</h1>
           <p className="text-gray-600">Manage your YOLO annotation projects</p>
         </div>
-        <Button onClick={() => navigate("/")}>
-          <Plus className="mr-2 h-4 w-4" />
-          New Project
-        </Button>
+        <AdminOnlyFeature>
+          <Button onClick={() => navigate("/")}>
+            <Plus className="mr-2 h-4 w-4" />
+            New Project
+          </Button>
+        </AdminOnlyFeature>
       </div>
 
       {/* Projects */}
@@ -123,13 +128,15 @@ const DashboardPage = () => {
                           <Play className="mr-2 h-4 w-4" />
                           Open Project
                         </DropdownMenuItem>
-                        <DropdownMenuItem 
-                          onClick={() => handleDeleteClick(project.id, project.name)}
-                          className="cursor-pointer text-red-600 focus:text-red-600"
-                        >
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Delete Project
-                        </DropdownMenuItem>
+                        {canDeleteProject && (
+                          <DropdownMenuItem 
+                            onClick={() => handleDeleteClick(project.id, project.name)}
+                            className="cursor-pointer text-red-600 focus:text-red-600"
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Delete Project
+                          </DropdownMenuItem>
+                        )}
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </div>

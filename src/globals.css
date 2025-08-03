@@ -52,41 +52,48 @@
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
+    /* Softer dark backgrounds - using grays instead of pure black */
+    --background: 240 10% 8%;        /* Very dark blue-gray instead of black */
+    --foreground: 240 5% 85%;        /* Comfortable off-white with slight blue tint */
 
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
+    --card: 240 10% 12%;             /* Slightly lighter than background */
+    --card-foreground: 240 5% 85%;   /* Comfortable off-white for cards */
 
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
+    --popover: 240 10% 12%;
+    --popover-foreground: 240 5% 85%;
 
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
+    /* Primary colors - using blue theme */
+    --primary: 217 91% 60%;          /* Blue primary */
+    --primary-foreground: 240 10% 95%; /* Soft off-white on blue */
 
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
+    /* Secondary/muted areas */
+    --secondary: 240 6% 18%;         /* Medium gray */
+    --secondary-foreground: 240 5% 80%; /* Comfortable light gray text */
 
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
+    --muted: 240 6% 16%;             /* Darker muted background */
+    --muted-foreground: 240 5% 60%;  /* Medium contrast gray text */
 
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
+    --accent: 240 6% 18%;
+    --accent-foreground: 240 5% 85%;
 
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
+    /* Better destructive colors */
+    --destructive: 0 75% 55%;        /* Brighter red for visibility */
+    --destructive-foreground: 240 10% 95%; /* Soft off-white on red */
 
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    /* Borders and inputs */
+    --border: 240 6% 20%;            /* Subtle borders */
+    --input: 240 6% 16%;             /* Input backgrounds */
+    --ring: 217 91% 60%;             /* Focus ring matches primary */
+
+    /* Sidebar colors */
+    --sidebar-background: 240 8% 14%; /* Slightly different from main bg */
+    --sidebar-foreground: 240 5% 82%; /* Comfortable sidebar text */
+    --sidebar-primary: 217 91% 60%;   /* Blue accent */
+    --sidebar-primary-foreground: 240 10% 95%; /* Soft off-white */
+    --sidebar-accent: 240 6% 20%;     /* Hover states */
+    --sidebar-accent-foreground: 240 5% 85%; /* Comfortable hover text */
+    --sidebar-border: 240 6% 22%;     /* Sidebar borders */
+    --sidebar-ring: 217 91% 60%;
   }
 }
 

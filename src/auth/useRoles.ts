@@ -1,18 +1,24 @@
-"use client";
-
-import { useMsal } from "@azure/msal-react";
+import { useAuth } from "./AuthProvider";
 
 export const useRoles = () => {
-  const { accounts } = useMsal();
-  const account = accounts[0];
-  
-  const getRoles = (): string[] => {
-    return account?.idTokenClaims?.roles || [];
-  };
+  const { user, isAuthenticated, isAdmin } = useAuth();
 
-  const hasRole = (role: string): boolean => {
-    return getRoles().includes(role);
-  };
+  const canCreateProject = isAdmin;
+  const canDeleteProject = isAdmin;
+  const canDeleteImages = isAdmin;
+  const canAnnotate = isAuthenticated;
+  const canViewProjects = isAuthenticated;
+  const canExportAnnotations = isAuthenticated;
 
-  return { getRoles, hasRole };
+  return {
+    user,
+    isAuthenticated,
+    isAdmin,
+    canCreateProject,
+    canDeleteProject,
+    canDeleteImages,
+    canAnnotate,
+    canViewProjects,
+    canExportAnnotations,
+  };
 };

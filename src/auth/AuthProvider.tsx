@@ -1,31 +1,90 @@
 "use client";
 
-import { PublicClientApplication } from "@azure/msal-browser";
-import { MsalProvider } from "@azure/msal-react";
-import { ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 
-const msalConfig = {
-  auth: {
-    clientId: import.meta.env.VITE_AZURE_CLIENT_ID || "your-client-id",
-    authority: `https://login.microsoftonline.com/${import.meta.env.VITE_AZURE_TENANT_ID || "common"}`,
-    redirectUri: window.location.origin,
-  },
-  cache: {
-    cacheLocation: "sessionStorage",
-    storeAuthStateInCookie: false,
-  },
+export type UserRole = "admin" | "annotator";
+
+export interface User {
+  username: string;
+  role: UserRole;
+}
+
+interface AuthContextType {
+  user: User | null;
+  login: (username: string, password: string) => Promise<boolean>;
+  logout: () => void;
+  isAuthenticated: boolean;
+  isAdmin: boolean;
+}
+
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+// User credentials and roles
+const USERS = {
+  tcci: { password: "tcc1", role: "admin" as UserRole },
+  tcc: { password: "tcc", role: "annotator" as UserRole },
 };
-
-const msalInstance = new PublicClientApplication(msalConfig);
 
 interface AuthProviderProps {
   children: ReactNode;
 }
 
 export const AuthProvider = ({ children }: AuthProviderProps) => {
+  const [user, setUser] = useState<User | null>(null);
+
+  // Check for existing session on mount
+  useEffect(() => {
+    const savedUser = localStorage.getItem("user");
+    if (savedUser) {
+      try {
+        setUser(JSON.parse(savedUser));
+      } catch {
+        localStorage.removeItem("user");
+      }
+    }
+  }, []);
+
+  const login = async (username: string, password: string): Promise<boolean> => {
+    const userCredentials = USERS[username as keyof typeof USERS];
+    
+    if (userCredentials && userCredentials.password === password) {
+      const newUser: User = {
+        username,
+        role: userCredentials.role,
+      };
+      
+      setUser(newUser);
+      localStorage.setItem("user", JSON.stringify(newUser));
+      return true;
+    }
+    
+    return false;
+  };
+
+  const logout = () => {
+    setUser(null);
+    localStorage.removeItem("user");
+  };
+
+  const value: AuthContextType = {
+    user,
+    login,
+    logout,
+    isAuthenticated: !!user,
+    isAdmin: user?.role === "admin",
+  };
+
   return (
-    <MsalProvider instance={msalInstance}>
+    <AuthContext.Provider value={value}>
       {children}
-    </MsalProvider>
+    </AuthContext.Provider>
   );
+};
+
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error("useAuth must be used within an AuthProvider");
+  }
+  return context;
 };

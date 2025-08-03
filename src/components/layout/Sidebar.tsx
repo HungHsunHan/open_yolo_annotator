@@ -4,31 +4,31 @@ import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { 
   Home, 
-  Image, 
-  Users, 
   Settings,
   LogOut
 } from "lucide-react";
-import { useMsal } from "@azure/msal-react";
+import { useAuth } from "@/auth/AuthProvider";
 
 export const Sidebar = () => {
   const location = useLocation();
-  const { instance } = useMsal();
+  const { logout, user, isAdmin } = useAuth();
 
   const handleLogout = () => {
-    instance.logoutRedirect();
+    logout();
   };
 
   const navItems = [
     { name: "Dashboard", href: "/dashboard", icon: Home },
-    { name: "Team", href: "/team", icon: Users },
     { name: "Settings", href: "/settings", icon: Settings },
   ];
 
   return (
-    <div className="flex flex-col w-64 bg-white border-r">
-      <div className="p-4 border-b">
-        <h1 className="text-xl font-bold">YOLO Annotator</h1>
+    <div className="flex flex-col w-64 bg-white dark:bg-sidebar border-r border-border">
+      <div className="p-4 border-b border-border">
+        <h1 className="text-xl font-bold text-foreground">YOLO Annotator</h1>
+        <p className="text-sm text-muted-foreground">
+          {user?.username} ({user?.role})
+        </p>
       </div>
       
       <nav className="flex-1 p-4">
@@ -54,10 +54,10 @@ export const Sidebar = () => {
         </ul>
       </nav>
       
-      <div className="p-4 border-t">
+      <div className="p-4 border-t border-border">
         <Button 
           variant="ghost" 
-          className="w-full justify-start"
+          className="w-full justify-start text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
           onClick={handleLogout}
         >
           <LogOut className="mr-2 h-4 w-4" />
