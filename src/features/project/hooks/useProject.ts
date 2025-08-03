@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { YoloProject } from "../types";
+import { YoloProject, ClassDefinition } from "../types";
 
 export const useProject = () => {
   const [currentProject, setCurrentProject] = useState<YoloProject | null>(null);
@@ -14,7 +14,14 @@ export const useProject = () => {
       const parsedProjects = JSON.parse(savedProjects).map((p: any) => ({
         ...p,
         createdAt: new Date(p.createdAt),
-        updatedAt: new Date(p.updatedAt)
+        updatedAt: new Date(p.updatedAt),
+        // For backward compatibility, generate classDefinitions if missing
+        classDefinitions: p.classDefinitions || p.classNames?.map((name: string, index: number) => ({
+          id: index,
+          name: name,
+          color: ["#ef4444", "#3b82f6", "#22c55e", "#eab308", "#a855f7", "#f97316", "#06b6d4", "#84cc16"][index % 8],
+          key: (index + 1).toString()
+        }))
       }));
       setProjects(parsedProjects);
       
@@ -45,7 +52,7 @@ export const useProject = () => {
     }
   }, [currentProject]);
 
-  const createProject = (name: string, classes: string[] = ["object"]) => {
+  const createProject = (name: string, classes: string[] = ["object"], classDefinitions?: ClassDefinition[]) => {
     const newProject: YoloProject = {
       id: crypto.randomUUID(),
       name,
@@ -57,7 +64,8 @@ export const useProject = () => {
         labels: `/projects/${name}/labels`, 
         classes: `/projects/${name}/classes.txt`
       },
-      classNames: classes
+      classNames: classes,
+      classDefinitions: classDefinitions
     };
     
     const updatedProjects = [...projects, newProject];
@@ -91,15 +99,32 @@ export const useProject = () => {
   };
 
   const deleteProject = (projectId: string) => {
+    // Remove project from projects list
     const updatedProjects = projects.filter(p => p.id !== projectId);
     setProjects(updatedProjects);
     
+    // Clear current project if it's the one being deleted
     if (currentProject?.id === projectId) {
       setCurrentProject(null);
       localStorage.removeItem('yolo-current-project');
     }
     
-    localStorage.setItem('yolo-projects', JSON.stringify(updatedProjects));
+    // Update projects in localStorage
+    if (updatedProjects.length > 0) {
+      localStorage.setItem('yolo-projects', JSON.stringify(updatedProjects));
+    } else {
+      localStorage.removeItem('yolo-projects');
+    }
+    
+    // Clean up all project-related data (images, annotations, etc.)
+    localStorage.removeItem(`project-${projectId}-images`);
+    
+    // Clean up any other project-specific data that might exist
+    Object.keys(localStorage).forEach(key => {
+      if (key.startsWith(`project-${projectId}-`)) {
+        localStorage.removeItem(key);
+      }
+    });
   };
 
   return { 

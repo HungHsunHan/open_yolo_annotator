@@ -13,8 +13,8 @@ const Index = () => {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const navigate = useNavigate();
 
-  const handleCreateProject = (name: string, classes: string[]) => {
-    const project = createProject(name, classes);
+  const handleCreateProject = (name: string, classes: string[], classDefinitions: any[]) => {
+    const project = createProject(name, classes, classDefinitions);
     console.log('Created project:', project);
     navigate(`/dashboard`);
   };
@@ -62,13 +62,9 @@ const Index = () => {
               <CardContent className="text-center py-12">
                 <Folder className="mx-auto h-12 w-12 text-gray-400 mb-4" />
                 <h3 className="text-lg font-medium mb-2">No projects yet</h3>
-                <p className="text-gray-600 mb-4">
-                  Get started by creating your first YOLO annotation project
+                <p className="text-gray-600">
+                  Use the "Create New Project" button above to get started
                 </p>
-                <Button onClick={() => setIsCreateDialogOpen(true)}>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Create First Project
-                </Button>
               </CardContent>
             </Card>
           )}

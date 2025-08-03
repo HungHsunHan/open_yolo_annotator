@@ -17,24 +17,14 @@ import {
   RotateCcw,
   ArrowLeft
 } from "lucide-react";
-import { useFileManager } from "@/features/file/hooks/useFileManager";
+import { useFileManager, Annotation } from "@/features/file/hooks/useFileManager";
+import { useProject } from "@/features/project/hooks/useProject";
+import { ClassDefinition } from "@/features/project/types";
 
-interface Annotation {
-  id: string;
-  classId: number;
-  className: string;
-  color: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
 
-const CLASSES = [
-  { id: 0, name: 'person', color: '#ef4444', key: '1' },
-  { id: 1, name: 'car', color: '#3b82f6', key: '2' },
-  { id: 2, name: 'bike', color: '#22c55e', key: '3' },
-  { id: 3, name: 'dog', color: '#eab308', key: '4' },
+const DEFAULT_COLORS = [
+  "#ef4444", "#3b82f6", "#22c55e", "#eab308", 
+  "#a855f7", "#f97316", "#06b6d4", "#84cc16"
 ];
 
 export const AnnotationPage = () => {
@@ -45,7 +35,11 @@ export const AnnotationPage = () => {
   const pathParts = window.location.pathname.split('/');
   const projectId = pathParts[2];
   
-  const { images, updateImageStatus, updateImageAnnotations } = useFileManager(projectId || "");
+  const { images, updateImageStatus, updateImageAnnotations, updateImageAnnotationData } = useFileManager(projectId || "");
+  const { projects } = useProject();
+  
+  // Find the current project by ID
+  const currentProject = projects.find(p => p.id === projectId);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
@@ -53,6 +47,8 @@ export const AnnotationPage = () => {
   const [startPoint, setStartPoint] = useState({ x: 0, y: 0 });
   const [currentBox, setCurrentBox] = useState<Annotation | null>(null);
   const [selectedClass, setSelectedClass] = useState(0);
+  const [selectedAnnotation, setSelectedAnnotation] = useState<string | null>(null);
+  const [drawingMode, setDrawingMode] = useState(false);
   const [scale, setScale] = useState(1);
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageDimensions, setImageDimensions] = useState({ width: 0, height: 0 });
@@ -60,6 +56,43 @@ export const AnnotationPage = () => {
   const currentImageIndex = images.findIndex(img => img.id === imageId);
   const currentImage = images[currentImageIndex] || null;
   const totalImages = images.length;
+
+  // Get classes from current project or use defaults
+  const CLASSES: ClassDefinition[] = currentProject?.classDefinitions || 
+    (currentProject?.classNames.map((name, index) => ({
+      id: index,
+      name: name,
+      color: DEFAULT_COLORS[index % DEFAULT_COLORS.length],
+      key: (index + 1).toString()
+    })) || [
+      { id: 0, name: 'person', color: '#ef4444', key: '1' },
+      { id: 1, name: 'car', color: '#3b82f6', key: '2' },
+      { id: 2, name: 'bike', color: '#22c55e', key: '3' },
+      { id: 3, name: 'dog', color: '#eab308', key: '4' },
+    ]);
+
+  // Load existing annotations when image changes
+  useEffect(() => {
+    if (currentImage && currentImage.annotationData) {
+      setAnnotations(currentImage.annotationData);
+    } else {
+      setAnnotations([]);
+    }
+  }, [currentImage]);
+
+  // Save annotations whenever they change (with debouncing to prevent loops)
+  useEffect(() => {
+    if (currentImage && annotations.length >= 0) {
+      const timeoutId = setTimeout(() => {
+        updateImageAnnotationData(currentImage.id, annotations);
+        // Update status based on annotation count
+        const newStatus = annotations.length > 0 ? 'completed' : 'pending';
+        updateImageStatus(currentImage.id, newStatus);
+      }, 100);
+      
+      return () => clearTimeout(timeoutId);
+    }
+  }, [annotations, currentImage]);
 
   // Load image and set canvas dimensions
   useEffect(() => {
@@ -91,6 +124,30 @@ export const AnnotationPage = () => {
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
       
       setImageLoaded(true);
+      
+      // Redraw existing annotations
+      redrawAnnotations();
+    };
+    
+    const redrawAnnotations = () => {
+      if (!ctx || !imageLoaded) return;
+      
+      // Clear and redraw image
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      if (imageRef.current) {
+        ctx.drawImage(imageRef.current, 0, 0, canvas.width, canvas.height);
+      }
+      
+      // Draw existing annotations
+      annotations.forEach(ann => {
+        ctx.strokeStyle = ann.color;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(ann.x * scale, ann.y * scale, ann.width * scale, ann.height * scale);
+        
+        ctx.fillStyle = ann.color;
+        ctx.font = '14px Arial';
+        ctx.fillText(ann.className, ann.x * scale + 5, ann.y * scale + 20);
+      });
     };
     
     img.onerror = (e) => {
@@ -108,6 +165,37 @@ export const AnnotationPage = () => {
     imageRef.current = img;
   }, [currentImage]);
 
+  // Redraw annotations when they change or scale changes
+  useEffect(() => {
+    if (imageLoaded && canvasRef.current) {
+      const canvas = canvasRef.current;
+      const ctx = canvas.getContext('2d');
+      if (!ctx || !imageRef.current) return;
+      
+      // Clear and redraw image
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(imageRef.current, 0, 0, canvas.width, canvas.height);
+      
+      // Draw existing annotations
+      annotations.forEach(ann => {
+        const isSelected = selectedAnnotation === ann.id;
+        ctx.strokeStyle = isSelected ? '#ff0000' : ann.color;
+        ctx.lineWidth = isSelected ? 3 : 2;
+        ctx.strokeRect(ann.x * scale, ann.y * scale, ann.width * scale, ann.height * scale);
+        
+        // Add selection indicator
+        if (isSelected) {
+          ctx.fillStyle = 'rgba(255, 0, 0, 0.1)';
+          ctx.fillRect(ann.x * scale, ann.y * scale, ann.width * scale, ann.height * scale);
+        }
+        
+        ctx.fillStyle = isSelected ? '#ff0000' : ann.color;
+        ctx.font = '14px Arial';
+        ctx.fillText(ann.className, ann.x * scale + 5, ann.y * scale + 20);
+      });
+    }
+  }, [annotations, selectedAnnotation, scale, imageLoaded]);
+
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
@@ -119,6 +207,13 @@ export const AnnotationPage = () => {
       }
       
       switch (e.key) {
+        case 'w':
+        case 'W':
+          setDrawingMode(!drawingMode);
+          setSelectedAnnotation(null);
+          setIsDrawing(false);
+          setCurrentBox(null);
+          break;
         case 'ArrowLeft':
         case 'a':
         case 'A':
@@ -135,20 +230,22 @@ export const AnnotationPage = () => {
           break;
         case 'Delete':
         case 'Backspace':
-          if (currentBox) {
-            handleDeleteAnnotation(currentBox.id);
+          if (selectedAnnotation) {
+            handleDeleteAnnotation(selectedAnnotation);
           }
           break;
         case 'Escape':
           setCurrentBox(null);
           setIsDrawing(false);
+          setSelectedAnnotation(null);
+          setDrawingMode(false);
           break;
       }
     };
 
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [currentImageIndex, currentBox, images]);
+  }, [currentImageIndex, selectedAnnotation, drawingMode, images]);
 
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
@@ -158,13 +255,34 @@ export const AnnotationPage = () => {
     const x = (e.clientX - rect.left) / scale;
     const y = (e.clientY - rect.top) / scale;
 
-    setIsDrawing(true);
-    setStartPoint({ x, y });
-    setCurrentBox(null);
+    // Check if clicking on an existing annotation
+    const clickedAnnotation = annotations.find(ann => {
+      return x >= ann.x && x <= ann.x + ann.width &&
+             y >= ann.y && y <= ann.y + ann.height;
+    });
+
+    if (drawingMode) {
+      // Drawing mode: start drawing new annotation
+      if (!clickedAnnotation) {
+        setSelectedAnnotation(null);
+        setIsDrawing(true);
+        setStartPoint({ x, y });
+        setCurrentBox(null);
+      }
+    } else {
+      // Selection mode: select annotation for deletion
+      if (clickedAnnotation) {
+        setSelectedAnnotation(clickedAnnotation.id);
+      } else {
+        setSelectedAnnotation(null);
+      }
+      setIsDrawing(false);
+      setCurrentBox(null);
+    }
   };
 
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isDrawing || !canvasRef.current || !imageRef.current || !imageLoaded) return;
+    if (!isDrawing || !drawingMode || !canvasRef.current || !imageRef.current || !imageLoaded) return;
 
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
@@ -216,7 +334,7 @@ export const AnnotationPage = () => {
   };
 
   const handleMouseUp = () => {
-    if (currentBox && currentBox.width > 10 && currentBox.height > 10) {
+    if (drawingMode && currentBox && currentBox.width > 10 && currentBox.height > 10) {
       setAnnotations([...annotations, currentBox]);
     }
     setIsDrawing(false);
@@ -225,6 +343,7 @@ export const AnnotationPage = () => {
 
   const handleDeleteAnnotation = (id: string) => {
     setAnnotations(annotations.filter(a => a.id !== id));
+    setSelectedAnnotation(null);
   };
 
   const handlePrevious = () => {
@@ -242,11 +361,7 @@ export const AnnotationPage = () => {
   };
 
   const handleComplete = () => {
-    if (currentImage) {
-      updateImageStatus(currentImage.id, 'completed');
-      updateImageAnnotations(currentImage.id, annotations.length);
-    }
-    
+    // Status is automatically updated based on annotations, so we just navigate
     if (currentImageIndex < totalImages - 1) {
       handleNext();
     } else {
@@ -287,15 +402,23 @@ export const AnnotationPage = () => {
     <div className="flex h-screen bg-gray-50">
       {/* Left Panel - Classes */}
       <div className="w-64 bg-white border-r p-4">
-        <h3 className="font-semibold mb-4">Classes</h3>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-semibold">Classes</h3>
+          <span className={`text-xs px-2 py-1 rounded ${
+            drawingMode ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'
+          }`}>
+            {drawingMode ? 'DRAW' : 'SELECT'}
+          </span>
+        </div>
         <div className="space-y-2">
           {CLASSES.map((cls) => (
             <button
               key={cls.id}
               onClick={() => setSelectedClass(cls.id)}
               className={`w-full text-left p-2 rounded flex items-center space-x-2 transition-colors ${
+                selectedClass === cls.id && drawingMode ? 'bg-blue-100 border-2 border-blue-400' : 
                 selectedClass === cls.id ? 'bg-blue-100' : 'hover:bg-gray-100'
-              }`}
+              } ${!drawingMode ? 'opacity-50' : ''}`}
             >
               <div 
                 className="w-4 h-4 rounded" 
@@ -307,13 +430,52 @@ export const AnnotationPage = () => {
         </div>
         
         <div className="mt-6">
+          <h4 className="font-medium mb-2">Current Annotations ({annotations.length})</h4>
+          <div className="space-y-1 max-h-32 overflow-y-auto">
+            {annotations.map((ann, index) => (
+              <div 
+                key={ann.id}
+                onClick={() => setSelectedAnnotation(ann.id)}
+                className={`p-2 rounded text-xs cursor-pointer flex items-center justify-between ${
+                  selectedAnnotation === ann.id ? 'bg-red-100 border border-red-300' : 'bg-gray-50 hover:bg-gray-100'
+                }`}
+              >
+                <div className="flex items-center space-x-2">
+                  <div 
+                    className="w-3 h-3 rounded" 
+                    style={{ backgroundColor: ann.color }}
+                  />
+                  <span>{ann.className}</span>
+                </div>
+                <Button 
+                  size="sm" 
+                  variant="ghost" 
+                  className="h-6 w-6 p-0 hover:bg-red-200"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDeleteAnnotation(ann.id);
+                  }}
+                >
+                  <Trash2 className="h-3 w-3" />
+                </Button>
+              </div>
+            ))}
+            {annotations.length === 0 && (
+              <p className="text-xs text-gray-500 italic">No annotations yet</p>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-6">
           <h4 className="font-medium mb-2">Shortcuts</h4>
           <div className="text-xs space-y-1 text-gray-600">
+            <p className="font-medium text-green-600">W: Toggle drawing mode</p>
             <p>1-9: Select class</p>
+            <p>Click: {drawingMode ? 'Draw boxes' : 'Select annotation'}</p>
             <p>A/D: Prev/Next</p>
             <p>Space: Complete</p>
-            <p>Del: Delete box</p>
-            <p>Esc: Cancel</p>
+            <p>Del: Delete selected</p>
+            <p>Esc: Exit modes</p>
           </div>
         </div>
       </div>
@@ -331,6 +493,16 @@ export const AnnotationPage = () => {
               {currentImageIndex + 1} / {totalImages}
             </span>
             <Progress value={((currentImageIndex + 1) / totalImages) * 100} className="w-32" />
+            <span className={`text-sm px-2 py-1 rounded font-medium ${
+              drawingMode ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'
+            }`}>
+              {drawingMode ? 'Drawing Mode (W to toggle)' : 'Selection Mode (W to draw)'}
+            </span>
+            {selectedAnnotation && !drawingMode && (
+              <span className="text-sm bg-red-100 text-red-800 px-2 py-1 rounded">
+                Annotation selected (press Del to delete)
+              </span>
+            )}
           </div>
           
           <div className="flex items-center space-x-2">
@@ -352,7 +524,9 @@ export const AnnotationPage = () => {
           <div className="flex justify-center items-center h-full">
             <canvas
               ref={canvasRef}
-              className="border bg-white cursor-crosshair max-w-full max-h-full"
+              className={`border bg-white max-w-full max-h-full ${
+                drawingMode ? 'cursor-crosshair' : 'cursor-pointer'
+              }`}
               style={{ maxWidth: '100%', maxHeight: '100%' }}
               onMouseDown={handleMouseDown}
               onMouseMove={handleMouseMove}
@@ -406,7 +580,7 @@ export const AnnotationPage = () => {
                   className="w-full h-full object-cover rounded"
                   onError={(e) => {
                     const target = e.target as HTMLImageElement;
-                    target.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 24 24' fill='none' stroke='%23ccc' stroke-width='2'%3E%3Crect x='3' y='3' width='18' height='18' rx='2' ry='2'/%3E%3Ccircle cx='8.5' cy='8.5' r='1.5'/%3E%3Cpath d='M21 15l-5-5L5 21'/%3E%3C/svg%3E";
+                    target.src = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMjQgMjQiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2NjYyIgc3Ryb2tlLXdpZHRoPSIyIj48cmVjdCB4PSIzIiB5PSIzIiB3aWR0aD0iMTgiIGhlaWdodD0iMTgiIHJ4PSIyIiByeT0iMiIvPjxjaXJjbGUgY3g9IjguNSIgY3k9IjguNSIgcj0iMS41Ii8+PHBhdGggZD0iTTIxIDE1bC01LTVMNSAyMSIvPjwvc3ZnPg==";
                   }}
                 />
               </div>

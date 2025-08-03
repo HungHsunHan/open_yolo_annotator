@@ -16,12 +16,18 @@ import { formatBytes } from "@/lib/utils";
 
 export const ProjectPage = () => {
   const { id } = useParams();
-  const { currentProject } = useProject();
+  const { projects } = useProject();
   const navigate = useNavigate();
-  const { images, uploadFiles, updateImageStatus, deleteImage, isLoading } = useFileManager(id || "");
+  
+  // Find the current project by URL ID, not the globally selected project
+  const currentProject = projects.find(p => p.id === id);
+  
+  const { images, uploadFiles, uploadDirectory, updateImageStatus, deleteImage, isLoading } = useFileManager(id || "");
+
   const [isDragging, setIsDragging] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const directoryInputRef = useRef<HTMLInputElement>(null);
   
   const IMAGES_PER_PAGE = 8;
 
@@ -46,6 +52,20 @@ export const ProjectPage = () => {
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       uploadFiles(e.target.files);
+    }
+  };
+
+  const handleDirectoryUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0 && currentProject) {
+      const classDefinitions = currentProject.classDefinitions || 
+        currentProject.classNames.map((name, index) => ({
+          id: index,
+          name: name,
+          color: ["#ef4444", "#3b82f6", "#22c55e", "#eab308", "#a855f7", "#f97316", "#06b6d4", "#84cc16"][index % 8],
+          key: (index + 1).toString()
+        }));
+      
+      uploadDirectory(e.target.files, classDefinitions);
     }
   };
 
@@ -164,6 +184,36 @@ export const ProjectPage = () => {
             </CardContent>
           </Card>
 
+          {/* Directory Upload */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Import Annotated Dataset</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div 
+                className="border-2 border-dashed rounded-lg p-6 text-center border-blue-300 bg-blue-50"
+                onClick={() => directoryInputRef.current?.click()}
+              >
+                <ImageIcon className="mx-auto h-10 w-10 text-blue-400 mb-3" />
+                <p className="text-md font-medium mb-1">Upload directory with images + annotations</p>
+                <p className="text-sm text-gray-600 mb-2">
+                  Select a folder containing images (.jpg, .png) and corresponding YOLO format annotations (.txt)
+                </p>
+                <p className="text-xs text-gray-500">
+                  Example: image1.jpg + image1.txt, image2.png + image2.txt
+                </p>
+                <input
+                  type="file"
+                  ref={directoryInputRef}
+                  className="hidden"
+                  multiple
+                  {...({ webkitdirectory: "" } as any)}
+                  onChange={handleDirectoryUpload}
+                />
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Statistics */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Card>
@@ -218,7 +268,10 @@ export const ProjectPage = () => {
                             onError={(e) => {
                               console.error("Image load error:", image.name);
                               const target = e.target as HTMLImageElement;
-                              target.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 24 24' fill='none' stroke='%23ccc' stroke-width='2'%3E%3Crect x='3' y='3' width='18' height='18' rx='2' ry='2'/%3E%3Ccircle cx='8.5' cy='8.5' r='1.5'/%3E%3Cpath d='M21 15l-5-5L5 21'/%3E%3C/svg%3E";
+                              target.src = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMjQgMjQiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2NjYyIgc3Ryb2tlLXdpZHRoPSIyIj48cmVjdCB4PSIzIiB5PSIzIiB3aWR0aD0iMTgiIGhlaWdodD0iMTgiIHJ4PSIyIiByeT0iMiIvPjxjaXJjbGUgY3g9IjguNSIgY3k9IjguNSIgcj0iMS41Ii8+PHBhdGggZD0iTTIxIDE1bC01LTVMNSAyMSIvPjwvc3ZnPg==";
+                            }}
+                            onLoad={() => {
+                              // Image loaded successfully
                             }}
                           />
                         </div>
@@ -309,8 +362,11 @@ export const ProjectPage = () => {
         </div>
         
         <div className="space-y-6">
-          <ClassManager projectClasses={currentProject.classNames} />
-          <ExportPanel />
+          <ClassManager 
+            projectClasses={currentProject.classNames} 
+            classDefinitions={currentProject.classDefinitions}
+          />
+          <ExportPanel projectId={id} currentProject={currentProject} images={images} />
         </div>
       </div>
     </div>

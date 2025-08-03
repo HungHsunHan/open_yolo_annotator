@@ -10,12 +10,7 @@ import { Plus, Trash2, AlertTriangle } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 
-interface ClassDefinition {
-  id: number;
-  name: string;
-  color: string;
-  key: string;
-}
+import { ClassDefinition } from "../types";
 
 const COLORS = [
   "#ef4444", "#3b82f6", "#22c55e", "#eab308", 
@@ -29,7 +24,7 @@ export const CreateProjectDialog = ({
 }: { 
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onCreate: (name: string, classes: string[]) => void;
+  onCreate: (name: string, classes: string[], classDefinitions: ClassDefinition[]) => void;
 }) => {
   const [projectName, setProjectName] = useState("");
   const [classes, setClasses] = useState<ClassDefinition[]>([
@@ -59,7 +54,7 @@ export const CreateProjectDialog = ({
   const handleCreate = () => {
     if (projectName.trim() && classes.length > 0) {
       const classNames = classes.map(c => c.name);
-      onCreate(projectName, classNames);
+      onCreate(projectName, classNames, classes);
       setProjectName("");
       setClasses([{ id: 0, name: "person", color: COLORS[0], key: "1" }]);
       onOpenChange(false);

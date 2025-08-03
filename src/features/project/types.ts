@@ -1,3 +1,10 @@
+export interface ClassDefinition {
+  id: number;
+  name: string;
+  color: string;
+  key: string;
+}
+
 export interface YoloProject {
   id: string;
   name: string;
@@ -10,4 +17,5 @@ export interface YoloProject {
     classes: string;
   };
   classNames: string[];
+  classDefinitions?: ClassDefinition[];
 }
