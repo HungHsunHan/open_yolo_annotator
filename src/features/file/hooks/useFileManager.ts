@@ -43,18 +43,45 @@ export const useFileManager = (projectId: string) => {
     
     const newImages: ImageFile[] = Array.from(files)
       .filter(file => file.type.startsWith('image/'))
-      .map(file => ({
+      .map(file => {
+        // Convert file to base64 for persistence
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        
+        return {
+          id: crypto.randomUUID(),
+          name: file.name,
+          url: URL.createObjectURL(file), // Temporary URL for immediate use
+          type: 'image' as const,
+          size: file.size,
+          uploadDate: new Date(),
+          status: 'pending' as const,
+          annotations: 0
+        };
+      });
+
+    // Convert files to base64 for persistence
+    for (const file of Array.from(files).filter(file => file.type.startsWith('image/'))) {
+      const base64 = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(e.target?.result as string);
+        reader.readAsDataURL(file);
+      });
+
+      const newImage: ImageFile = {
         id: crypto.randomUUID(),
         name: file.name,
-        url: URL.createObjectURL(file),
+        url: base64, // Use base64 for persistence
         type: 'image' as const,
         size: file.size,
         uploadDate: new Date(),
         status: 'pending' as const,
         annotations: 0
-      }));
+      };
 
-    setImages(prev => [...prev, ...newImages]);
+      setImages(prev => [...prev, newImage]);
+    }
+    
     setIsLoading(false);
   };
 

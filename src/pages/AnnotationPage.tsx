@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -41,32 +41,61 @@ export const AnnotationPage = () => {
   const { imageId } = useParams();
   const navigate = useNavigate();
   
-  // Get project ID from URL - use the current path structure
+  // Get project ID from URL
   const pathParts = window.location.pathname.split('/');
-  const projectId = pathParts[2]; // /annotate/:projectId/:imageId or /annotate/:imageId
+  const projectId = pathParts[2];
   
-  // Use file manager with the correct project ID
   const { images, updateImageStatus, updateImageAnnotations } = useFileManager(projectId || "");
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const imageRef = useRef<HTMLImageElement>(null);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [isDrawing, setIsDrawing] = useState(false);
   const [startPoint, setStartPoint] = useState({ x: 0, y: 0 });
   const [currentBox, setCurrentBox] = useState<Annotation | null>(null);
   const [selectedClass, setSelectedClass] = useState(0);
   const [scale, setScale] = useState(1);
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const [imageDimensions, setImageDimensions] = useState({ width: 0, height: 0 });
 
-  // Find current image
   const currentImageIndex = images.findIndex(img => img.id === imageId);
   const currentImage = images[currentImageIndex] || null;
   const totalImages = images.length;
 
-  // Debug logging
+  // Load image and set canvas dimensions
   useEffect(() => {
-    console.log('Project ID:', projectId);
-    console.log('Image ID:', imageId);
-    console.log('Available images:', images.length);
-    console.log('Images:', images);
-  }, [projectId, imageId, images]);
+    if (!currentImage || !canvasRef.current) return;
+
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const img = new Image();
+    img.onload = () => {
+      setImageDimensions({ width: img.width, height: img.height });
+      
+      // Calculate scale to fit image in viewport
+      const maxWidth = 800;
+      const maxHeight = 600;
+      const scaleX = maxWidth / img.width;
+      const scaleY = maxHeight / img.height;
+      const newScale = Math.min(scaleX, scaleY, 1);
+      
+      setScale(newScale);
+      
+      // Set canvas dimensions to match scaled image
+      canvas.width = img.width * newScale;
+      canvas.height = img.height * newScale;
+      
+      // Draw image
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      
+      setImageLoaded(true);
+    };
+    
+    img.src = currentImage.url;
+    imageRef.current = img;
+  }, [currentImage]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -124,10 +153,11 @@ export const AnnotationPage = () => {
   };
 
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isDrawing) return;
+    if (!isDrawing || !canvasRef.current || !imageRef.current) return;
 
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
 
     const rect = canvas.getBoundingClientRect();
     const x = (e.clientX - rect.left) / scale;
@@ -137,6 +167,30 @@ export const AnnotationPage = () => {
     const height = Math.abs(y - startPoint.y);
     const boxX = Math.min(x, startPoint.x);
     const boxY = Math.min(y, startPoint.y);
+
+    // Redraw image and existing annotations
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(imageRef.current, 0, 0, canvas.width, canvas.height);
+
+    // Draw existing annotations
+    annotations.forEach(ann => {
+      ctx.strokeStyle = ann.color;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(ann.x * scale, ann.y * scale, ann.width * scale, ann.height * scale);
+      
+      ctx.fillStyle = ann.color;
+      ctx.font = '14px Arial';
+      ctx.fillText(ann.className, ann.x * scale + 5, ann.y * scale + 20);
+    });
+
+    // Draw current box
+    ctx.strokeStyle = CLASSES[selectedClass].color;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(boxX * scale, boxY * scale, width * scale, height * scale);
+    
+    ctx.fillStyle = CLASSES[selectedClass].color;
+    ctx.font = '14px Arial';
+    ctx.fillText(CLASSES[selectedClass].name, boxX * scale + 5, boxY * scale + 20);
 
     setCurrentBox({
       id: Date.now().toString(),
@@ -165,14 +219,14 @@ export const AnnotationPage = () => {
   const handlePrevious = () => {
     if (currentImageIndex > 0) {
       const prevImage = images[currentImageIndex - 1];
-      navigate(`/annotate/${prevImage.id}`);
+      navigate(`/project/${projectId}/annotate/${prevImage.id}`);
     }
   };
 
   const handleNext = () => {
     if (currentImageIndex < totalImages - 1) {
       const nextImage = images[currentImageIndex + 1];
-      navigate(`/annotate/${nextImage.id}`);
+      navigate(`/project/${projectId}/annotate/${nextImage.id}`);
     }
   };
 
@@ -196,7 +250,7 @@ export const AnnotationPage = () => {
   if (!currentImage && images.length > 0) {
     // If we have images but current image not found, redirect to first image
     if (images.length > 0) {
-      navigate(`/annotate/${images[0].id}`, { replace: true });
+      navigate(`/project/${projectId}/annotate/${images[0].id}`, { replace: true });
       return null;
     }
   }
@@ -284,13 +338,11 @@ export const AnnotationPage = () => {
 
         {/* Canvas Area */}
         <div className="flex-1 overflow-auto p-4">
-          <div className="flex justify-center">
+          <div className="flex justify-center items-center h-full">
             <canvas
               ref={canvasRef}
-              width={800}
-              height={600}
-              className="border bg-white cursor-crosshair"
-              style={{ transform: `scale(${scale})`, transformOrigin: 'top left' }}
+              className="border bg-white cursor-crosshair max-w-full max-h-full"
+              style={{ maxWidth: '100%', maxHeight: '100%' }}
               onMouseDown={handleMouseDown}
               onMouseMove={handleMouseMove}
               onMouseUp={handleMouseUp}
@@ -331,12 +383,18 @@ export const AnnotationPage = () => {
           {images.map((img, index) => (
             <button
               key={img.id}
-              onClick={() => navigate(`/annotate/${img.id}`)}
+              onClick={() => navigate(`/project/${projectId}/annotate/${img.id}`)}
               className={`w-full p-2 rounded border transition-colors ${
                 img.id === imageId ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
               }`}
             >
-              <div className="aspect-square bg-gray-200 rounded mb-1" />
+              <div className="aspect-square bg-gray-200 rounded mb-1">
+                <img 
+                  src={img.url} 
+                  alt={img.name} 
+                  className="w-full h-full object-cover rounded"
+                />
+              </div>
               <p className="text-xs truncate">{img.name}</p>
             </button>
           ))}
