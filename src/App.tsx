@@ -11,6 +11,7 @@ import DashboardPage from "./pages/DashboardPage";
 import { AnnotationPage } from "./pages/AnnotationPage";
 import { LoginPage } from "./pages/LoginPage";
 import SettingsPage from "./pages/SettingsPage";
+import UserManagementPage from "./pages/UserManagementPage";
 import { AuthProvider } from "./auth/AuthProvider";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { ThemeProvider } from "./contexts/ThemeProvider";
@@ -42,6 +43,13 @@ const App = () => (
                 <ProtectedRoute>
                   <MainLayout>
                     <SettingsPage />
+                  </MainLayout>
+                </ProtectedRoute>
+              } />
+              <Route path="/users" element={
+                <ProtectedRoute>
+                  <MainLayout>
+                    <UserManagementPage />
                   </MainLayout>
                 </ProtectedRoute>
               } />

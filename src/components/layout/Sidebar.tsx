@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { 
   Home, 
   Settings,
+  Users,
   LogOut
 } from "lucide-react";
 import { useAuth } from "@/auth/AuthProvider";
@@ -20,6 +21,7 @@ export const Sidebar = () => {
   const navItems = [
     { name: "Dashboard", href: "/dashboard", icon: Home },
     { name: "Settings", href: "/settings", icon: Settings },
+    ...(isAdmin ? [{ name: "User Management", href: "/users", icon: Users }] : []),
   ];
 
   return (

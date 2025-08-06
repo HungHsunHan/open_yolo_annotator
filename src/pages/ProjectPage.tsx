@@ -3,6 +3,7 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { YoloEditor } from "@/features/annotation/components/YoloEditor";
 import { ClassManager } from "@/features/project/components/ClassManager";
+import { ProjectAssignments } from "@/features/project/components/ProjectAssignments";
 import { ExportPanel } from "@/features/annotation/components/ExportPanel";
 import { useProject } from "@/features/project/hooks/useProject";
 import { useFileManager } from "@/features/file/hooks/useFileManager";
@@ -14,6 +15,9 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { formatBytes } from "@/lib/utils";
 import { useRoles } from "@/auth/useRoles";
+import { UserPresence } from "@/features/collaboration/components/UserPresence";
+import { ImageStatusIndicator, ImageStatusBadge } from "@/features/collaboration/components/ImageStatusIndicator";
+import { useCollaboration } from "@/features/collaboration/hooks/useCollaboration";
 
 export const ProjectPage = () => {
   const { id } = useParams();
@@ -25,6 +29,7 @@ export const ProjectPage = () => {
   const currentProject = projects.find(p => p.id === id);
   
   const { images, uploadFiles, uploadDirectory, updateImageStatus, deleteImage, isLoading } = useFileManager(id || "");
+  const { assignImage, canAssign, getImageStatus } = useCollaboration(id || "", images);
 
   const [isDragging, setIsDragging] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
@@ -81,8 +86,23 @@ export const ProjectPage = () => {
     }
   };
 
-  const handleAnnotateImage = (imageId: string) => {
-    navigate(`/project/${id}/annotate/${imageId}`);
+  const handleAnnotateImage = async (imageId: string) => {
+    // Try to assign the image before navigating
+    const success = await assignImage(imageId, 'manual');
+    if (success) {
+      navigate(`/project/${id}/annotate/${imageId}`);
+    } else {
+      // Show status info if can't assign
+      const status = getImageStatus(imageId);
+      if (status.status === 'locked') {
+        alert(`This image is currently being worked on by ${status.assignedUsername}. Please try again later.`);
+      } else if (status.status === 'completed') {
+        // Still allow viewing completed images
+        navigate(`/project/${id}/annotate/${imageId}`);
+      } else {
+        alert('Unable to assign this image. Please try again.');
+      }
+    }
   };
 
   const getStatusIcon = (status: string) => {
@@ -156,6 +176,8 @@ export const ProjectPage = () => {
       
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         <div className="lg:col-span-3 space-y-6">
+          {/* Collaboration Panel */}
+          <UserPresence projectId={id || ""} images={images} />
           {/* Upload Area */}
           <Card>
             <CardHeader>
@@ -259,9 +281,23 @@ export const ProjectPage = () => {
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                  {currentImages.map((image) => (
+                  {currentImages.map((image) => {
+                    const imageStatus = getImageStatus(image.id);
+                    const canAnnotate = canAssign(image.id) || imageStatus.status === 'completed';
+                    
+                    return (
                     <div key={image.id} className="group relative">
                       <div className={`border-2 rounded-lg overflow-hidden ${getStatusColor(image.status)}`}>
+                        {/* Assignment Status Overlay */}
+                        <div className="absolute top-2 left-2 z-10">
+                          <ImageStatusIndicator 
+                            imageId={image.id}
+                            images={images}
+                            projectId={id || ""}
+                            size="sm"
+                          />
+                        </div>
+                        
                         <div className="aspect-square bg-gray-200 flex items-center justify-center">
                           <img 
                             src={image.url} 
@@ -282,9 +318,10 @@ export const ProjectPage = () => {
                             <Button 
                               size="sm" 
                               onClick={() => handleAnnotateImage(image.id)}
-                              className="opacity-0 group-hover:opacity-100 transition-opacity"
+                              className={`opacity-0 group-hover:opacity-100 transition-opacity ${!canAnnotate ? 'opacity-50 cursor-not-allowed' : ''}`}
+                              disabled={!canAnnotate && imageStatus.status !== 'completed'}
                             >
-                              Annotate
+                              {imageStatus.status === 'completed' ? 'Review' : 'Annotate'}
                             </Button>
                             {canDeleteImages && (
                               <Button 
@@ -302,12 +339,20 @@ export const ProjectPage = () => {
                       <div className="mt-2">
                         <p className="text-sm font-medium truncate">{image.name}</p>
                         <div className="flex items-center justify-between mt-1">
-                          {getStatusBadge(image.status)}
+                          <div className="flex items-center space-x-2">
+                            {getStatusBadge(image.status)}
+                            <ImageStatusBadge 
+                              imageId={image.id}
+                              images={images}
+                              projectId={id || ""}
+                            />
+                          </div>
                           <span className="text-xs text-gray-500">{formatBytes(image.size)}</span>
                         </div>
                       </div>
                     </div>
-                  ))}
+                  );
+                  })}
                 </div>
 
                 {/* Pagination */}
@@ -366,6 +411,7 @@ export const ProjectPage = () => {
         </div>
         
         <div className="space-y-6">
+          <ProjectAssignments projectId={id || ""} />
           <ClassManager 
             projectClasses={currentProject.classNames} 
             classDefinitions={currentProject.classDefinitions}

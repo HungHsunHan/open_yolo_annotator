@@ -20,6 +20,10 @@ import {
 import { useFileManager, Annotation } from "@/features/file/hooks/useFileManager";
 import { useProject } from "@/features/project/hooks/useProject";
 import { ClassDefinition } from "@/features/project/types";
+import { useCollaboration } from "@/features/collaboration/hooks/useCollaboration";
+import { ImageStatusIndicator } from "@/features/collaboration/components/ImageStatusIndicator";
+import { ConflictResolution } from "@/features/collaboration/components/ConflictResolution";
+import { useAuth } from "@/auth/AuthProvider";
 
 
 const DEFAULT_COLORS = [
@@ -30,6 +34,7 @@ const DEFAULT_COLORS = [
 export const AnnotationPage = () => {
   const { imageId } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
   
   // Get project ID from URL
   const pathParts = window.location.pathname.split('/');
@@ -37,6 +42,13 @@ export const AnnotationPage = () => {
   
   const { images, updateImageStatus, updateImageAnnotations, updateImageAnnotationData } = useFileManager(projectId || "");
   const { projects } = useProject();
+  const { 
+    assignImage, 
+    releaseAssignment, 
+    updateActivity, 
+    getImageStatus,
+    canAssign 
+  } = useCollaboration(projectId || "", images);
   
   // Find the current project by ID
   const currentProject = projects.find(p => p.id === projectId);
@@ -71,14 +83,35 @@ export const AnnotationPage = () => {
       { id: 3, name: 'dog', color: '#eab308', key: '4' },
     ]);
 
-  // Load existing annotations when image changes
+  // Assign image and load existing annotations when image changes
   useEffect(() => {
-    if (currentImage && currentImage.annotationData) {
-      setAnnotations(currentImage.annotationData);
-    } else {
-      setAnnotations([]);
+    if (currentImage && user) {
+      // Try to assign the image for annotation
+      assignImage(currentImage.id, 'annotation').then((success) => {
+        if (!success) {
+          const status = getImageStatus(currentImage.id);
+          if (status.status === 'locked' && status.assignedUsername !== user.username) {
+            // Show warning but still allow viewing
+            console.warn(`Image is locked by ${status.assignedUsername}`);
+          }
+        }
+      });
+      
+      // Load existing annotations
+      if (currentImage.annotationData) {
+        setAnnotations(currentImage.annotationData);
+      } else {
+        setAnnotations([]);
+      }
     }
-  }, [currentImage]);
+    
+    // Cleanup function to release assignment when leaving
+    return () => {
+      if (currentImage && user) {
+        releaseAssignment(currentImage.id, false);
+      }
+    };
+  }, [currentImage, user, assignImage, releaseAssignment, getImageStatus]);
 
   // Save annotations whenever they change (with debouncing to prevent loops)
   useEffect(() => {
@@ -88,11 +121,16 @@ export const AnnotationPage = () => {
         // Update status based on annotation count
         const newStatus = annotations.length > 0 ? 'completed' : 'pending';
         updateImageStatus(currentImage.id, newStatus);
+        
+        // Track annotation activity
+        if (user) {
+          updateActivity(currentImage.id, annotations.length);
+        }
       }, 100);
       
       return () => clearTimeout(timeoutId);
     }
-  }, [annotations, currentImage]);
+  }, [annotations, currentImage, user, updateActivity]);
 
   // Load image and set canvas dimensions
   useEffect(() => {
@@ -360,8 +398,13 @@ export const AnnotationPage = () => {
     }
   };
 
-  const handleComplete = () => {
-    // Status is automatically updated based on annotations, so we just navigate
+  const handleComplete = async () => {
+    // Mark assignment as completed before navigating
+    if (currentImage && user) {
+      await releaseAssignment(currentImage.id, true);
+    }
+    
+    // Navigate to next image or back to project
     if (currentImageIndex < totalImages - 1) {
       handleNext();
     } else {
@@ -478,6 +521,14 @@ export const AnnotationPage = () => {
             <p>Esc: Exit modes</p>
           </div>
         </div>
+
+        {/* Conflict Resolution */}
+        <div className="mt-6">
+          <ConflictResolution 
+            projectId={projectId || ""} 
+            images={images}
+          />
+        </div>
       </div>
 
       {/* Main Content */}
@@ -493,6 +544,16 @@ export const AnnotationPage = () => {
               {currentImageIndex + 1} / {totalImages}
             </span>
             <Progress value={((currentImageIndex + 1) / totalImages) * 100} className="w-32" />
+            
+            {/* Assignment Status */}
+            <ImageStatusIndicator 
+              imageId={currentImage.id}
+              images={images}
+              projectId={projectId || ""}
+              showUsernames={true}
+              size="md"
+            />
+            
             <span className={`text-sm px-2 py-1 rounded font-medium ${
               drawingMode ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'
             }`}>

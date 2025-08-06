@@ -11,6 +11,7 @@ export interface YoloProject {
   createdAt: Date;
   updatedAt: Date;
   createdBy: string;
+  assignedUsers: string[]; // Array of user IDs who have access to this project
   directoryStructure: {
     images: string;
     labels: string;
