@@ -48,12 +48,6 @@ export const useCollaboration = (projectId: string, images: ImageFile[] = []) =>
         setState(initialState);
         setIsInitialized(true);
         
-        // Start heartbeat
-        startHeartbeat();
-        
-        // Start cleanup timer
-        startCleanupTimer();
-        
       } catch (error) {
         console.error('Failed to initialize collaboration:', error);
       }
@@ -62,22 +56,21 @@ export const useCollaboration = (projectId: string, images: ImageFile[] = []) =>
     initializeCollaboration();
     
     return () => {
-      cleanup();
+      // Cleanup intervals on unmount
+      if (heartbeatInterval.current) {
+        clearInterval(heartbeatInterval.current);
+      }
+      if (cleanupInterval.current) {
+        clearInterval(cleanupInterval.current);
+      }
     };
   }, [user, projectId]);
 
-  // Subscribe to collaboration state changes
+  // Start heartbeat and cleanup timers after initialization
   useEffect(() => {
-    if (!isInitialized) return;
-    
-    const unsubscribe = coordinationService.current.subscribe((newState) => {
-      setState(newState);
-    });
-    
-    return unsubscribe;
-  }, [isInitialized]);
+    if (!isInitialized || !projectId) return;
 
-  const startHeartbeat = useCallback(() => {
+    // Start heartbeat
     if (heartbeatInterval.current) {
       clearInterval(heartbeatInterval.current);
     }
@@ -91,9 +84,8 @@ export const useCollaboration = (projectId: string, images: ImageFile[] = []) =>
         }
       }
     }, 30000); // 30 seconds
-  }, [projectId, currentSession]);
 
-  const startCleanupTimer = useCallback(() => {
+    // Start cleanup timer
     if (cleanupInterval.current) {
       clearInterval(cleanupInterval.current);
     }
@@ -105,16 +97,28 @@ export const useCollaboration = (projectId: string, images: ImageFile[] = []) =>
         console.error('Cleanup failed:', error);
       }
     }, 60000); // 1 minute
-  }, [projectId]);
 
-  const cleanup = useCallback(() => {
-    if (heartbeatInterval.current) {
-      clearInterval(heartbeatInterval.current);
-    }
-    if (cleanupInterval.current) {
-      clearInterval(cleanupInterval.current);
-    }
-  }, []);
+    return () => {
+      if (heartbeatInterval.current) {
+        clearInterval(heartbeatInterval.current);
+      }
+      if (cleanupInterval.current) {
+        clearInterval(cleanupInterval.current);
+      }
+    };
+  }, [isInitialized, projectId, currentSession]);
+
+  // Subscribe to collaboration state changes
+  useEffect(() => {
+    if (!isInitialized) return;
+    
+    const unsubscribe = coordinationService.current.subscribe((newState) => {
+      setState(newState);
+    });
+    
+    return unsubscribe;
+  }, [isInitialized]);
+
 
   // Assignment functions
   const assignImage = useCallback(async (imageId: string, lockReason: 'annotation' | 'manual' | 'auto' = 'manual'): Promise<boolean> => {

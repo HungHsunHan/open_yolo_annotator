@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { toast } from "@/hooks/use-toast";
 import { UserPlus, UserMinus, Users, Crown } from "lucide-react";
@@ -85,24 +86,37 @@ export const ProjectAssignments = ({ projectId }: ProjectAssignmentsProps) => {
     <AdminOnlyFeature>
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Users className="h-5 w-5" />
-              <div>
-                <CardTitle>Project Assignments</CardTitle>
-                <CardDescription>
-                  Manage which annotators can access this project
-                </CardDescription>
-              </div>
+          <div className="flex items-center gap-2 mb-4">
+            <Users className="h-5 w-5" />
+            <div>
+              <CardTitle>Project Assignments</CardTitle>
+              <CardDescription>
+                Manage which annotators can access this project
+              </CardDescription>
             </div>
-            
+          </div>
+          
+          <TooltipProvider>
             <Dialog open={isAssignDialogOpen} onOpenChange={setIsAssignDialogOpen}>
-              <DialogTrigger asChild>
-                <Button disabled={availableUsers.length === 0}>
-                  <UserPlus className="h-4 w-4 mr-2" />
-                  Assign User
-                </Button>
-              </DialogTrigger>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <DialogTrigger asChild>
+                    <Button 
+                      disabled={availableUsers.length === 0}
+                      className="w-full sm:w-auto"
+                      size="sm"
+                    >
+                      <UserPlus className="h-4 w-4 mr-2" />
+                      Assign User
+                    </Button>
+                  </DialogTrigger>
+                </TooltipTrigger>
+                {availableUsers.length === 0 && (
+                  <TooltipContent>
+                    <p>All annotators have been assigned to this project</p>
+                  </TooltipContent>
+                )}
+              </Tooltip>
               <DialogContent>
                 <DialogHeader>
                   <DialogTitle>Assign User to Project</DialogTitle>
@@ -136,7 +150,7 @@ export const ProjectAssignments = ({ projectId }: ProjectAssignmentsProps) => {
                 </DialogFooter>
               </DialogContent>
             </Dialog>
-          </div>
+          </TooltipProvider>
         </CardHeader>
         
         <CardContent>

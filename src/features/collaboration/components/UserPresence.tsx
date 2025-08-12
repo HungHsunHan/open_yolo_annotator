@@ -3,25 +3,25 @@ import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Users, Clock, Image as ImageIcon } from 'lucide-react';
-import { UserSession } from '../types';
-import { useCollaboration } from '../hooks/useCollaboration';
+import { UserSession, CollaborationState } from '../types';
 import { ImageFile } from '@/features/file/hooks/useFileManager';
 import { useAuth } from '@/auth/AuthProvider';
 
 interface UserPresenceProps {
   projectId: string;
   images: ImageFile[];
+  activeUsers?: UserSession[];
+  collaborationState?: CollaborationState | null;
   className?: string;
 }
 
-export const UserPresence = ({ projectId, images, className }: UserPresenceProps) => {
+export const UserPresence = ({ projectId, images, activeUsers = [], collaborationState, className }: UserPresenceProps) => {
   const { user } = useAuth();
-  const { activeUsers: allActiveSessions, state } = useCollaboration(projectId, images);
   const [currentTime, setCurrentTime] = useState(new Date());
 
   // Group sessions by username and get the most recent session for each user
-  const activeUsers = Object.values(
-    allActiveSessions.reduce((acc, session) => {
+  const uniqueActiveUsers = Object.values(
+    activeUsers.reduce((acc, session) => {
       const existing = acc[session.username];
       if (!existing || session.lastHeartbeat > existing.lastHeartbeat) {
         acc[session.username] = session;
@@ -81,7 +81,7 @@ export const UserPresence = ({ projectId, images, className }: UserPresenceProps
   const getUserActivity = (session: UserSession): string => {
     if (!session.currentImageId) return 'Browsing project';
     
-    const assignment = state?.assignments[session.currentImageId];
+    const assignment = collaborationState?.assignments[session.currentImageId];
     if (!assignment) return 'Viewing image';
     
     switch (assignment.status) {
@@ -99,7 +99,7 @@ export const UserPresence = ({ projectId, images, className }: UserPresenceProps
   const getActivityColor = (session: UserSession): string => {
     if (!session.currentImageId) return 'bg-gray-500';
     
-    const assignment = state?.assignments[session.currentImageId];
+    const assignment = collaborationState?.assignments[session.currentImageId];
     if (!assignment) return 'bg-blue-500';
     
     switch (assignment.status) {
@@ -114,7 +114,7 @@ export const UserPresence = ({ projectId, images, className }: UserPresenceProps
     }
   };
 
-  if (!activeUsers.length) {
+  if (!uniqueActiveUsers.length) {
     return (
       <Card className={`p-4 ${className}`}>
         <div className="flex items-center space-x-2 text-sm text-gray-500">
@@ -131,7 +131,7 @@ export const UserPresence = ({ projectId, images, className }: UserPresenceProps
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
             <Users className="h-4 w-4" />
-            <span className="text-sm font-medium">Active Users ({activeUsers.length})</span>
+            <span className="text-sm font-medium">Active Users ({uniqueActiveUsers.length})</span>
           </div>
           <Badge variant="outline" className="text-xs">
             Live
@@ -139,7 +139,7 @@ export const UserPresence = ({ projectId, images, className }: UserPresenceProps
         </div>
         
         <div className="space-y-2">
-          {activeUsers.map((session) => (
+          {uniqueActiveUsers.map((session) => (
             <div key={session.sessionId} className="flex items-center justify-between p-2 rounded-lg bg-gray-50">
               <div className="flex items-center space-x-3">
                 <div className="relative">
@@ -196,11 +196,11 @@ export const UserPresence = ({ projectId, images, className }: UserPresenceProps
           ))}
         </div>
         
-        {state && (
+        {collaborationState && (
           <div className="pt-2 border-t text-xs text-gray-500">
             <div className="flex justify-between">
-              <span>Active assignments: {Object.keys(state.assignments).length}</span>
-              <span>Recent activities: {state.activities.length}</span>
+              <span>Active assignments: {Object.keys(collaborationState.assignments).length}</span>
+              <span>Recent activities: {collaborationState.activities.length}</span>
             </div>
           </div>
         )}

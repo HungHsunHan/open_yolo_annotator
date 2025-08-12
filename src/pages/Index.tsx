@@ -38,7 +38,7 @@ const Index = () => {
             <Card
               key={project.id}
               className="cursor-pointer hover:shadow-lg transition-shadow"
-              onClick={() => navigate(`/dashboard`)}
+              onClick={() => navigate(`/project/${project.id}`)}
             >
               <CardHeader>
                 <CardTitle className="flex items-center">

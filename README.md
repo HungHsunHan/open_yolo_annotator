@@ -14,6 +14,9 @@ A modern web application for creating and managing YOLO object detection annotat
 - **📤 Multiple Export Formats**: Export annotations in YOLO format and other standard formats
 - **📂 File Management**: Upload and organize images and annotation files
 - **🔐 Azure Authentication**: Secure login with Microsoft Azure MSAL
+- **👥 User Management**: Admin controls for creating and managing annotator accounts
+- **🛡️ Role-Based Access Control**: Admin and annotator roles with permission-based features
+- **🎯 Project Assignment**: Assign specific annotators to projects for controlled access
 - **🎨 Modern UI**: Built with shadcn/ui components and Tailwind CSS
 - **📱 Responsive Design**: Works seamlessly across desktop and mobile devices
 
@@ -79,6 +82,7 @@ src/
 │   ├── annotation/      # YOLO annotation functionality
 │   ├── file/           # File upload and management
 │   └── project/        # Project and class management
+├── auth/               # Authentication and role management
 ├── lib/                # Utility libraries
 │   └── yolo-parser.ts  # YOLO format parsing utilities
 └── pages/              # Application pages
@@ -86,6 +90,8 @@ src/
     ├── DashboardPage.tsx
     ├── ImagesPage.tsx
     ├── ProjectPage.tsx
+    ├── UserManagementPage.tsx
+    ├── SettingsPage.tsx
     └── ...
 ```
 
@@ -111,6 +117,23 @@ src/
 2. Choose your desired export format
 3. Download the complete annotation dataset
 
+### Admin Features
+
+#### User Management (Admin Only)
+1. Navigate to User Management from the sidebar
+2. Create new annotator accounts with username and password
+3. Assign roles (Admin or Annotator) to users
+4. Edit existing user details and roles
+5. Delete user accounts (except your own)
+
+#### Project Assignment (Admin Only)
+1. Open any project settings
+2. Use the Project Assignments panel to:
+   - Assign specific annotators to projects
+   - Remove annotator access from projects
+   - View all users assigned to a project
+   - See project creators (cannot be removed)
+
 ## 🔧 Configuration
 
 ### Azure Authentication
@@ -122,6 +145,20 @@ VITE_AZURE_CLIENT_ID=your_client_id
 VITE_AZURE_TENANT_ID=your_tenant_id
 VITE_AZURE_REDIRECT_URI=http://localhost:5173
 ```
+
+### User Roles & Permissions
+
+The application supports two user roles:
+
+- **Admin**: Full access to all features including:
+  - User management (create, edit, delete users)
+  - Project assignment (assign annotators to specific projects)
+  - All standard annotation features
+  
+- **Annotator**: Limited access to assigned projects:
+  - Can only view and annotate projects they're assigned to
+  - Cannot manage users or assign projects
+  - Full annotation capabilities within their assigned projects
 
 ## 🤝 Contributing
 
