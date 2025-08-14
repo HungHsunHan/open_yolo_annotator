@@ -26,7 +26,9 @@
       "mcp__playwright__browser_console_messages",
       "mcp__playwright__browser_press_key",
       "mcp__playwright__browser_close",
-      "mcp__playwright__browser_file_upload"
+      "mcp__playwright__browser_file_upload",
+      "Bash(docker logs:*)",
+      "Bash(docker-compose:*)"
     ],
     "deny": []
   }

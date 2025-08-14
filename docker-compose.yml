@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15
+    container_name: yolo-postgres
+    environment:
+      POSTGRES_DB: yolo_annotation
+      POSTGRES_USER: yolo_user
+      POSTGRES_PASSWORD: yolo_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"
+    networks:
+      - yolo-network
+
+  # FastAPI Backend
+  backend:
+    build: 
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: yolo-backend
+    environment:
+      DATABASE_URL: postgresql://yolo_user:yolo_password@postgres:5432/yolo_annotation
+      SECRET_KEY: your-production-secret-key-change-this
+      CORS_ORIGINS: http://localhost:5173,http://frontend:80
+    volumes:
+      - file_storage:/app/storage
+      - ./backend:/app
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+    networks:
+      - yolo-network
+    command: ["python", "start.py"]
+
+  # React Frontend  
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: yolo-frontend
+    environment:
+      VITE_API_URL: http://localhost:8000
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+    networks:
+      - yolo-network
+
+volumes:
+  postgres_data:
+  file_storage:
+
+networks:
+  yolo-network:
+    driver: bridge

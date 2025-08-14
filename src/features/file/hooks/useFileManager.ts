@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { ClassDefinition } from "@/features/project/types";
-import { imageDBService, migrateFromLocalStorage, isMigrated } from "@/services/imageDb";
-import type { ImageFile } from "@/services/imageDb";
+import { apiImageService } from "@/services/apiImageService";
+import type { ImageFile } from "@/services/apiImageService";
 
 export interface Annotation {
   id: string;
@@ -57,18 +57,8 @@ export const useFileManager = (projectId: string) => {
         try {
           setIsLoading(true);
           
-          // Check if data needs to be migrated from localStorage
-          const migrated = await isMigrated(projectId);
-          if (!migrated) {
-            console.log(`Attempting to migrate data for project ${projectId}...`);
-            const migrationResult = await migrateFromLocalStorage(projectId);
-            if (migrationResult) {
-              console.log(`Successfully migrated data for project ${projectId}`);
-            }
-          }
-          
-          // Load images from IndexedDB
-          const loadedImages = await imageDBService.getProjectImages(projectId);
+          // Load images from API
+          const loadedImages = await apiImageService.getProjectImages(projectId);
           setImages(loadedImages);
           
         } catch (error) {
@@ -97,7 +87,7 @@ export const useFileManager = (projectId: string) => {
     setLastError(null);
     
     try {
-      const uploadedImages = await imageDBService.uploadFiles(files, projectId);
+      const uploadedImages = await apiImageService.uploadFiles(files, projectId);
       setImages(prev => [...prev, ...uploadedImages]);
     } catch (error) {
       console.error('Error uploading files:', error);
@@ -109,7 +99,7 @@ export const useFileManager = (projectId: string) => {
 
   const updateImageStatus = async (imageId: string, status: ImageFile['status']) => {
     try {
-      await imageDBService.updateImageStatus(imageId, status);
+      await apiImageService.updateImageStatus(imageId, status);
       setImages(prev => prev.map(img => 
         img.id === imageId ? { ...img, status } : img
       ));
@@ -127,7 +117,7 @@ export const useFileManager = (projectId: string) => {
 
   const updateImageAnnotationData = async (imageId: string, annotationData: Annotation[]) => {
     try {
-      await imageDBService.updateImageAnnotations(imageId, annotationData);
+      await apiImageService.updateImageAnnotations(imageId, annotationData);
       setImages(prev => prev.map(img => 
         img.id === imageId ? { 
           ...img, 
@@ -144,7 +134,7 @@ export const useFileManager = (projectId: string) => {
 
   const deleteImage = async (imageId: string) => {
     try {
-      await imageDBService.deleteImage(imageId);
+      await apiImageService.deleteImage(imageId);
       setImages(prev => prev.filter(img => img.id !== imageId));
     } catch (error) {
       console.error('Failed to delete image:', error);
@@ -156,7 +146,7 @@ export const useFileManager = (projectId: string) => {
     if (!projectId) return;
     
     try {
-      await imageDBService.clearProjectImages(projectId);
+      await apiImageService.clearProjectImages(projectId);
       setImages([]);
     } catch (error) {
       console.error('Failed to clear all images:', error);
@@ -174,7 +164,7 @@ export const useFileManager = (projectId: string) => {
     setLastError(null);
     
     try {
-      const uploadedImages = await imageDBService.uploadDirectory(files, projectId, classDefinitions);
+      const uploadedImages = await apiImageService.uploadDirectory(files, projectId, classDefinitions);
       setImages(prev => [...prev, ...uploadedImages]);
     } catch (error) {
       console.error('Error uploading directory:', error);
@@ -186,7 +176,7 @@ export const useFileManager = (projectId: string) => {
 
   const getStorageStats = async () => {
     try {
-      return await imageDBService.getStorageInfo();
+      return await apiImageService.getStorageInfo();
     } catch (error) {
       console.error('Failed to get storage stats:', error);
       return { used: 0, total: 0, available: 0 };

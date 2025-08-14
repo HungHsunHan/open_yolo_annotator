@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { apiClient } from "@/lib/api";
 
 export type UserRole = "admin" | "annotator";
 
@@ -8,8 +9,7 @@ export interface User {
   id: string;
   username: string;
   role: UserRole;
-  password: string;
-  createdAt: string;
+  created_at: string;
 }
 
 interface AuthContextType {
@@ -21,29 +21,11 @@ interface AuthContextType {
   isLoading: boolean;
   users: User[];
   createUser: (username: string, password: string, role: UserRole) => Promise<boolean>;
-  updateUser: (id: string, updates: Partial<Omit<User, 'id' | 'createdAt'>>) => Promise<boolean>;
+  updateUser: (id: string, updates: Partial<Omit<User, 'id' | 'created_at'>>) => Promise<boolean>;
   deleteUser: (id: string) => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-// Default users
-const DEFAULT_USERS: User[] = [
-  {
-    id: "admin-1",
-    username: "tcci",
-    password: "tcc1",
-    role: "admin" as UserRole,
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: "annotator-1", 
-    username: "tcc",
-    password: "tcc",
-    role: "annotator" as UserRole,
-    createdAt: new Date().toISOString(),
-  },
-];
 
 interface AuthProviderProps {
   children: ReactNode;
@@ -54,62 +36,67 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [users, setUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Check for existing session and users on mount
+  // Load users and check for existing session on mount
   useEffect(() => {
-    const savedUser = localStorage.getItem("user");
-    const savedUsers = localStorage.getItem("users");
-    
-    if (savedUsers) {
+    const initAuth = async () => {
       try {
-        setUsers(JSON.parse(savedUsers));
-      } catch {
-        setUsers(DEFAULT_USERS);
-        localStorage.setItem("users", JSON.stringify(DEFAULT_USERS));
+        // Check if we have a token and try to validate it by fetching user data
+        const savedToken = localStorage.getItem('auth_token');
+        if (savedToken) {
+          try {
+            // Try to fetch user data to validate token
+            apiClient.setToken(savedToken);
+            const userData = await apiClient.getCurrentUser();
+            setUser(userData);
+          } catch (error) {
+            // Token is invalid, clear it
+            console.log('Invalid token, clearing auth state');
+            apiClient.setToken(null);
+            localStorage.removeItem('user');
+          }
+        }
+
+        // Load users list if authenticated as admin
+        if (user?.role === 'admin') {
+          try {
+            const usersData = await apiClient.getUsers();
+            setUsers(usersData);
+          } catch (error) {
+            console.error('Failed to load users:', error);
+            setUsers([]);
+          }
+        }
+      } catch (error) {
+        console.error('Auth initialization failed:', error);
+      } finally {
+        setIsLoading(false);
       }
-    } else {
-      setUsers(DEFAULT_USERS);
-      localStorage.setItem("users", JSON.stringify(DEFAULT_USERS));
-    }
-    
-    if (savedUser) {
-      try {
-        const parsedUser = JSON.parse(savedUser);
-        // Remove password from stored user session for security
-        const userWithoutPassword = {
-          id: parsedUser.id,
-          username: parsedUser.username,
-          role: parsedUser.role,
-          password: '', // Don't store password in session
-          createdAt: parsedUser.createdAt,
-        };
-        setUser(userWithoutPassword);
-      } catch {
-        localStorage.removeItem("user");
-      }
-    }
-    
-    // Authentication check is complete
-    setIsLoading(false);
+    };
+
+    initAuth();
   }, []);
 
   const login = async (username: string, password: string): Promise<boolean> => {
-    const foundUser = users.find(u => u.username === username && u.password === password);
-    
-    if (foundUser) {
-      const userWithoutPassword = {
-        id: foundUser.id,
-        username: foundUser.username,
-        role: foundUser.role,
-        password: '', // Don't store password in session
-        createdAt: foundUser.createdAt,
-      };
+    try {
+      const response = await apiClient.login(username, password);
+      setUser(response.user);
+      localStorage.setItem("user", JSON.stringify(response.user));
       
-      setUser(userWithoutPassword);
-      localStorage.setItem("user", JSON.stringify(userWithoutPassword));
+      // Load users list if admin
+      if (response.user.role === 'admin') {
+        try {
+          const usersData = await apiClient.getUsers();
+          setUsers(usersData);
+        } catch (error) {
+          console.error('Failed to load users after login:', error);
+        }
+      }
+      
       return true;
+    } catch (error) {
+      console.error('Login failed:', error);
+      return false;
     }
-    
-    return false;
   };
 
   const createUser = async (username: string, password: string, role: UserRole): Promise<boolean> => {
@@ -117,45 +104,31 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       return false;
     }
     
-    // Check if username already exists
-    if (users.some(u => u.username === username)) {
+    try {
+      const newUser = await apiClient.register(username, password, role);
+      const updatedUsers = [...users, newUser];
+      setUsers(updatedUsers);
+      return true;
+    } catch (error) {
+      console.error('Failed to create user:', error);
       return false;
     }
-    
-    const newUser: User = {
-      id: `${role}-${Date.now()}`,
-      username,
-      password,
-      role,
-      createdAt: new Date().toISOString(),
-    };
-    
-    const updatedUsers = [...users, newUser];
-    setUsers(updatedUsers);
-    localStorage.setItem("users", JSON.stringify(updatedUsers));
-    return true;
   };
 
-  const updateUser = async (id: string, updates: Partial<Omit<User, 'id' | 'createdAt'>>): Promise<boolean> => {
+  const updateUser = async (id: string, updates: Partial<Omit<User, 'id' | 'created_at'>>): Promise<boolean> => {
     if (!user || user.role !== "admin") {
       return false;
     }
     
-    const userIndex = users.findIndex(u => u.id === id);
-    if (userIndex === -1) {
+    try {
+      const updatedUser = await apiClient.updateUser(id, updates);
+      const updatedUsers = users.map(u => u.id === id ? updatedUser : u);
+      setUsers(updatedUsers);
+      return true;
+    } catch (error) {
+      console.error('Failed to update user:', error);
       return false;
     }
-    
-    // Prevent changing username if it already exists (unless it's the same user)
-    if (updates.username && users.some(u => u.username === updates.username && u.id !== id)) {
-      return false;
-    }
-    
-    const updatedUsers = [...users];
-    updatedUsers[userIndex] = { ...updatedUsers[userIndex], ...updates };
-    setUsers(updatedUsers);
-    localStorage.setItem("users", JSON.stringify(updatedUsers));
-    return true;
   };
 
   const deleteUser = async (id: string): Promise<boolean> => {
@@ -168,14 +141,20 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       return false;
     }
     
-    const updatedUsers = users.filter(u => u.id !== id);
-    setUsers(updatedUsers);
-    localStorage.setItem("users", JSON.stringify(updatedUsers));
-    return true;
+    try {
+      await apiClient.deleteUser(id);
+      const updatedUsers = users.filter(u => u.id !== id);
+      setUsers(updatedUsers);
+      return true;
+    } catch (error) {
+      console.error('Failed to delete user:', error);
+      return false;
+    }
   };
 
   const logout = () => {
     setUser(null);
+    apiClient.setToken(null);
     localStorage.removeItem("user");
   };
 
@@ -186,7 +165,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     isAuthenticated: !!user,
     isAdmin: user?.role === "admin",
     isLoading,
-    users: users.map(u => ({ ...u, password: '' })), // Don't expose passwords
+    users, // Users from API don't contain passwords
     createUser,
     updateUser,
     deleteUser,
