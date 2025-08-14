@@ -15,6 +15,9 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { formatBytes } from "@/lib/utils";
 import { useRoles } from "@/auth/useRoles";
+import { DeleteImageDialog } from "@/components/DeleteImageDialog";
+import { ClearAllImagesDialog } from "@/components/ClearAllImagesDialog";
+import { useToast } from "@/hooks/use-toast";
 // Collaboration features temporarily disabled
 // import { UserPresence } from "@/features/collaboration/components/UserPresence";
 // import { ImageStatusIndicator, ImageStatusBadge } from "@/features/collaboration/components/ImageStatusIndicator";
@@ -25,12 +28,16 @@ export const ProjectPage = () => {
   const { projects } = useProject();
   const navigate = useNavigate();
   const { canDeleteImages } = useRoles();
+  const { toast } = useToast();
   const [isProjectLoading, setIsProjectLoading] = useState(true);
+  const [deleteImageDialogOpen, setDeleteImageDialogOpen] = useState(false);
+  const [imageToDelete, setImageToDelete] = useState<{id: string, name: string} | null>(null);
+  const [clearAllImagesDialogOpen, setClearAllImagesDialogOpen] = useState(false);
   
   // Find the current project by URL ID, not the globally selected project
   const currentProject = projects.find(p => p.id === id);
   
-  const { images, uploadFiles, uploadDirectory, updateImageStatus, deleteImage, isLoading } = useFileManager(id || "");
+  const { images, uploadFiles, uploadDirectory, updateImageStatus, deleteImage, clearAllImages, isLoading } = useFileManager(id || "");
   
   // Temporarily disable collaboration features for debugging
   const shouldInitializeCollaboration = false; // currentProject && id;
@@ -95,8 +102,33 @@ export const ProjectPage = () => {
     }
   };
 
-  const handleDeleteImage = (imageId: string) => {
-    deleteImage(imageId);
+  const handleDeleteImage = (imageId: string, imageName: string) => {
+    setImageToDelete({ id: imageId, name: imageName });
+    setDeleteImageDialogOpen(true);
+  };
+
+  const handleDeleteImageConfirm = () => {
+    if (imageToDelete) {
+      deleteImage(imageToDelete.id);
+      toast({
+        title: "Image deleted",
+        description: `"${imageToDelete.name}" has been permanently deleted.`,
+      });
+      setImageToDelete(null);
+    }
+  };
+
+  const handleClearAllImages = () => {
+    setClearAllImagesDialogOpen(true);
+  };
+
+  const handleClearAllImagesConfirm = () => {
+    const imageCount = images.length;
+    clearAllImages();
+    toast({
+      title: "All images cleared",
+      description: `${imageCount} images have been permanently deleted from the project.`,
+    });
   };
 
   const handleReviewImages = () => {
@@ -289,10 +321,22 @@ export const ProjectPage = () => {
               <CardHeader>
                 <div className="flex justify-between items-center">
                   <CardTitle>Image Library</CardTitle>
-                  <Button onClick={handleReviewImages} disabled={images.length === 0}>
-                    <Eye className="mr-2 h-4 w-4" />
-                    Start Review
-                  </Button>
+                  <div className="flex gap-2">
+                    {canDeleteImages && images.length > 0 && (
+                      <Button 
+                        variant="destructive" 
+                        size="sm"
+                        onClick={handleClearAllImages}
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Clear All
+                      </Button>
+                    )}
+                    <Button onClick={handleReviewImages} disabled={images.length === 0}>
+                      <Eye className="mr-2 h-4 w-4" />
+                      Start Review
+                    </Button>
+                  </div>
                 </div>
               </CardHeader>
               <CardContent>
@@ -330,7 +374,7 @@ export const ProjectPage = () => {
                               <Button 
                                 size="sm" 
                                 variant="destructive"
-                                onClick={() => handleDeleteImage(image.id)}
+                                onClick={() => handleDeleteImage(image.id, image.name)}
                                 className="opacity-0 group-hover:opacity-100 transition-opacity"
                               >
                                 <Trash2 className="h-4 w-4" />
@@ -417,6 +461,23 @@ export const ProjectPage = () => {
           <ExportPanel projectId={id} currentProject={currentProject} images={images} />
         </div>
       </div>
+      
+      {/* Delete Image Confirmation Dialog */}
+      <DeleteImageDialog
+        open={deleteImageDialogOpen}
+        onOpenChange={setDeleteImageDialogOpen}
+        imageName={imageToDelete?.name || ""}
+        onConfirm={handleDeleteImageConfirm}
+      />
+      
+      {/* Clear All Images Confirmation Dialog */}
+      <ClearAllImagesDialog
+        open={clearAllImagesDialogOpen}
+        onOpenChange={setClearAllImagesDialogOpen}
+        imageCount={images.length}
+        projectName={currentProject?.name || ""}
+        onConfirm={handleClearAllImagesConfirm}
+      />
     </div>
   );
 };

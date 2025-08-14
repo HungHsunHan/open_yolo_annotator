@@ -18,6 +18,7 @@ interface AuthContextType {
   logout: () => void;
   isAuthenticated: boolean;
   isAdmin: boolean;
+  isLoading: boolean;
   users: User[];
   createUser: (username: string, password: string, role: UserRole) => Promise<boolean>;
   updateUser: (id: string, updates: Partial<Omit<User, 'id' | 'createdAt'>>) => Promise<boolean>;
@@ -51,6 +52,7 @@ interface AuthProviderProps {
 export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [user, setUser] = useState<User | null>(null);
   const [users, setUsers] = useState<User[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   // Check for existing session and users on mount
   useEffect(() => {
@@ -85,6 +87,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         localStorage.removeItem("user");
       }
     }
+    
+    // Authentication check is complete
+    setIsLoading(false);
   }, []);
 
   const login = async (username: string, password: string): Promise<boolean> => {
@@ -180,6 +185,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     logout,
     isAuthenticated: !!user,
     isAdmin: user?.role === "admin",
+    isLoading,
     users: users.map(u => ({ ...u, password: '' })), // Don't expose passwords
     createUser,
     updateUser,

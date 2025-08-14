@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Images for YOLO Annotator</title>
+</head>
+<body>
+    <h1>Test Images</h1>
+    <p>Six black 1x1 pixel images for testing photo count bug:</p>
+    
+    <!-- 6 completely black 1x1 pixel images as base64 -->
+    <img id="test-image-1" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChAI/hRWkOAAAAABJRU5ErkJggg==" alt="Black Test Image 1" style="width: 50px; height: 50px; border: 1px solid #ccc; margin: 5px;">
+    <img id="test-image-2" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChAI/hRWkOAAAAABJRU5ErkJggg==" alt="Black Test Image 2" style="width: 50px; height: 50px; border: 1px solid #ccc; margin: 5px;">
+    <img id="test-image-3" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChAI/hRWkOAAAAABJRU5ErkJggg==" alt="Black Test Image 3" style="width: 50px; height: 50px; border: 1px solid #ccc; margin: 5px;">
+    <img id="test-image-4" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChAI/hRWkOAAAAABJRU5ErkJggg==" alt="Black Test Image 4" style="width: 50px; height: 50px; border: 1px solid #ccc; margin: 5px;">
+    <img id="test-image-5" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChAI/hRWkOAAAAABJRU5ErkJggg==" alt="Black Test Image 5" style="width: 50px; height: 50px; border: 1px solid #ccc; margin: 5px;">
+    <img id="test-image-6" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChAI/hRWkOAAAAABJRU5ErkJggg==" alt="Black Test Image 6" style="width: 50px; height: 50px; border: 1px solid #ccc; margin: 5px;">
+    
+    <br><br>
+    <p>Right-click and "Save image as..." to download these test images, or use the JavaScript function below to download them as files:</p>
+    
+    <button onclick="downloadAllImages()">Download All 6 Test Images</button>
+    
+    <script>
+        function downloadAllImages() {
+            const images = [
+                { id: 'test-image-1', name: 'black-test-1.png' },
+                { id: 'test-image-2', name: 'black-test-2.png' },
+                { id: 'test-image-3', name: 'black-test-3.png' },
+                { id: 'test-image-4', name: 'black-test-4.png' },
+                { id: 'test-image-5', name: 'black-test-5.png' },
+                { id: 'test-image-6', name: 'black-test-6.png' }
+            ];
+            
+            images.forEach(img => {
+                const element = document.getElementById(img.id);
+                const link = document.createElement('a');
+                link.href = element.src;
+                link.download = img.name;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            });
+        }
+    </script>
+</body>
+</html>

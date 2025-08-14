@@ -16,3 +16,11 @@ export function formatBytes(bytes: number, decimals = 2) {
 
   return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
 }
+
+export function getImageCompletionStatus(annotationData?: any[]): 'pending' | 'completed' {
+  return (annotationData && annotationData.length > 0) ? 'completed' : 'pending';
+}
+
+export function isImageCompleted(annotationData?: any[]): boolean {
+  return getImageCompletionStatus(annotationData) === 'completed';
+}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { YoloProject, ClassDefinition } from "../types";
 import { useAuth } from "@/auth/AuthProvider";
 
@@ -9,11 +9,13 @@ export const useProject = () => {
   const [currentProject, setCurrentProject] = useState<YoloProject | null>(null);
   const [allProjects, setAllProjects] = useState<YoloProject[]>([]);
   
-  // Computed property: filter projects based on user access
-  const projects = allProjects.filter(project => {
-    if (isAdmin) return true; // Admins see all projects
-    return project.assignedUsers.includes(user?.id || ''); // Annotators see only assigned projects
-  });
+  // Computed property: filter projects based on user access (memoized to prevent infinite re-renders)
+  const projects = useMemo(() => {
+    return allProjects.filter(project => {
+      if (isAdmin) return true; // Admins see all projects
+      return project.assignedUsers.includes(user?.id || ''); // Annotators see only assigned projects
+    });
+  }, [allProjects, isAdmin, user?.id]);
 
   // Load projects from localStorage on mount
   useEffect(() => {
@@ -25,13 +27,13 @@ export const useProject = () => {
         updatedAt: new Date(p.updatedAt),
         // For backward compatibility, add assignedUsers if missing
         assignedUsers: p.assignedUsers || [],
-        // For backward compatibility, generate classDefinitions if missing
-        classDefinitions: p.classDefinitions || p.classNames?.map((name: string, index: number) => ({
+        // For backward compatibility, only generate classDefinitions if missing and classNames exist
+        classDefinitions: p.classDefinitions || (p.classNames ? p.classNames.map((name: string, index: number) => ({
           id: index,
           name: name,
           color: ["#ef4444", "#3b82f6", "#22c55e", "#eab308", "#a855f7", "#f97316", "#06b6d4", "#84cc16"][index % 8],
           key: (index + 1).toString()
-        }))
+        })) : [])
       }));
       setAllProjects(parsedProjects);
       

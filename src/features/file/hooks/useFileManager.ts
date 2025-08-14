@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { parseYoloFile } from "@/lib/yolo-parser";
 import { ClassDefinition } from "@/features/project/types";
+import { imageDBService, migrateFromLocalStorage, isMigrated } from "@/services/imageDb";
+import type { ImageFile } from "@/services/imageDb";
 
 export interface Annotation {
   id: string;
@@ -15,117 +16,107 @@ export interface Annotation {
   height: number;
 }
 
-export interface ImageFile {
-  id: string;
-  name: string;
-  url: string;
-  type: 'image';
-  size: number;
-  uploadDate: Date;
-  status: 'pending' | 'in-progress' | 'completed';
-  annotations: number;
-  annotationData?: Annotation[];
-}
+export type { ImageFile };
+
+// Helper function to validate if project exists
+const validateProjectExists = (projectId: string): boolean => {
+  if (!projectId) return false;
+  
+  const savedProjects = localStorage.getItem('yolo-projects');
+  if (!savedProjects) return false;
+  
+  try {
+    const projects = JSON.parse(savedProjects);
+    return projects.some((p: { id: string }) => p.id === projectId);
+  } catch (e) {
+    console.error("Failed to validate project existence:", e);
+    return false;
+  }
+};
 
 export const useFileManager = (projectId: string) => {
   const [images, setImages] = useState<ImageFile[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [lastError, setLastError] = useState<string | null>(null);
 
-  // Load images from localStorage when project changes
+  // Load images from IndexedDB when project changes
   useEffect(() => {
+    setLastError(null);
+    
     if (projectId) {
-      const savedImages = localStorage.getItem(`project-${projectId}-images`);
-      if (savedImages) {
-        try {
-          const parsedImages = JSON.parse(savedImages).map((img: any) => ({
-            ...img,
-            uploadDate: new Date(img.uploadDate),
-            // Ensure annotationData exists and status is correct
-            annotationData: img.annotationData || [],
-            status: (img.annotationData && img.annotationData.length > 0) ? 'completed' : 'pending',
-            annotations: img.annotationData ? img.annotationData.length : 0
-          }));
-          
-          // Validate that images have proper base64 URLs
-          const validImages = parsedImages.filter((img: any) => {
-            if (!img.url || !img.url.startsWith('data:image/')) {
-              console.warn(`Invalid image URL for ${img.name}, removing from list`);
-              return false;
-            }
-            return true;
-          });
-          
-          setImages(validImages);
-        } catch (e) {
-          console.error("Failed to parse saved images:", e);
-          setImages([]);
-          // Clear corrupted data
-          localStorage.removeItem(`project-${projectId}-images`);
-        }
+      // Validate project exists before loading images
+      if (!validateProjectExists(projectId)) {
+        const error = `Project ${projectId} does not exist or cannot be found`;
+        console.warn(error);
+        setLastError(error);
+        setImages([]);
+        return;
       }
+
+      const loadImages = async () => {
+        try {
+          setIsLoading(true);
+          
+          // Check if data needs to be migrated from localStorage
+          const migrated = await isMigrated(projectId);
+          if (!migrated) {
+            console.log(`Attempting to migrate data for project ${projectId}...`);
+            const migrationResult = await migrateFromLocalStorage(projectId);
+            if (migrationResult) {
+              console.log(`Successfully migrated data for project ${projectId}`);
+            }
+          }
+          
+          // Load images from IndexedDB
+          const loadedImages = await imageDBService.getProjectImages(projectId);
+          setImages(loadedImages);
+          
+        } catch (error) {
+          const errorMsg = `Failed to load images for project ${projectId}: ${error}`;
+          console.error(errorMsg);
+          setLastError(errorMsg);
+          setImages([]);
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
+      loadImages();
+    } else {
+      setImages([]);
     }
   }, [projectId]);
 
-  // Save images to localStorage whenever they change
-  useEffect(() => {
-    if (projectId && images.length > 0) {
-      try {
-        localStorage.setItem(`project-${projectId}-images`, JSON.stringify(images));
-      } catch (e) {
-        console.error("Failed to save images:", e);
-      }
-    } else if (projectId) {
-      // Clear storage if no images
-      localStorage.removeItem(`project-${projectId}-images`);
-    }
-  }, [images, projectId]);
-
   const uploadFiles = async (files: FileList) => {
-    setIsLoading(true);
-    
-    const validFiles = Array.from(files).filter(file => file.type.startsWith('image/'));
-    
-    for (const file of validFiles) {
-      try {
-        // Convert file to base64 for persistence
-        const base64 = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = (e) => {
-            if (e.target?.result) {
-              resolve(e.target.result as string);
-            } else {
-              reject(new Error("Failed to read file"));
-            }
-          };
-          reader.onerror = () => reject(new Error("File read error"));
-          reader.readAsDataURL(file);
-        });
-
-        const newImage: ImageFile = {
-          id: crypto.randomUUID(),
-          name: file.name,
-          url: base64, // Use base64 for persistence
-          type: 'image' as const,
-          size: file.size,
-          uploadDate: new Date(),
-          status: 'pending' as const,
-          annotations: 0,
-          annotationData: []
-        };
-
-        setImages(prev => [...prev, newImage]);
-      } catch (error) {
-        console.error("Error processing file:", file.name, error);
-      }
+    if (!projectId) {
+      setLastError('No project selected');
+      return;
     }
+
+    setIsLoading(true);
+    setLastError(null);
     
-    setIsLoading(false);
+    try {
+      const uploadedImages = await imageDBService.uploadFiles(files, projectId);
+      setImages(prev => [...prev, ...uploadedImages]);
+    } catch (error) {
+      console.error('Error uploading files:', error);
+      setLastError(error instanceof Error ? error.message : 'Failed to upload files');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const updateImageStatus = (imageId: string, status: ImageFile['status']) => {
-    setImages(prev => prev.map(img => 
-      img.id === imageId ? { ...img, status } : img
-    ));
+  const updateImageStatus = async (imageId: string, status: ImageFile['status']) => {
+    try {
+      await imageDBService.updateImageStatus(imageId, status);
+      setImages(prev => prev.map(img => 
+        img.id === imageId ? { ...img, status } : img
+      ));
+    } catch (error) {
+      console.error('Failed to update image status:', error);
+      setLastError('Failed to update image status');
+    }
   };
 
   const updateImageAnnotations = (imageId: string, annotations: number) => {
@@ -134,126 +125,83 @@ export const useFileManager = (projectId: string) => {
     ));
   };
 
-  const updateImageAnnotationData = (imageId: string, annotationData: Annotation[]) => {
-    setImages(prev => prev.map(img => 
-      img.id === imageId ? { 
-        ...img, 
-        annotations: annotationData.length,
-        annotationData 
-      } : img
-    ));
+  const updateImageAnnotationData = async (imageId: string, annotationData: Annotation[]) => {
+    try {
+      await imageDBService.updateImageAnnotations(imageId, annotationData);
+      setImages(prev => prev.map(img => 
+        img.id === imageId ? { 
+          ...img, 
+          annotations: annotationData.length,
+          annotationData,
+          status: 'completed' // Update status based on annotations
+        } : img
+      ));
+    } catch (error) {
+      console.error('Failed to update image annotations:', error);
+      setLastError('Failed to save annotations');
+    }
   };
 
-  const deleteImage = (imageId: string) => {
-    setImages(prev => prev.filter(img => img.id !== imageId));
+  const deleteImage = async (imageId: string) => {
+    try {
+      await imageDBService.deleteImage(imageId);
+      setImages(prev => prev.filter(img => img.id !== imageId));
+    } catch (error) {
+      console.error('Failed to delete image:', error);
+      setLastError('Failed to delete image');
+    }
   };
 
-  const clearAllImages = () => {
-    setImages([]);
+  const clearAllImages = async () => {
+    if (!projectId) return;
+    
+    try {
+      await imageDBService.clearProjectImages(projectId);
+      setImages([]);
+    } catch (error) {
+      console.error('Failed to clear all images:', error);
+      setLastError('Failed to clear images');
+    }
   };
 
   const uploadDirectory = async (files: FileList, classDefinitions: ClassDefinition[]) => {
+    if (!projectId) {
+      setLastError('No project selected');
+      return;
+    }
+
     setIsLoading(true);
+    setLastError(null);
     
     try {
-      // Separate image files and txt files
-      const allFiles = Array.from(files);
-      const imageFiles = allFiles.filter(file => file.type.startsWith('image/'));
-      const txtFiles = allFiles.filter(file => file.name.endsWith('.txt'));
-      
-      // Create a map of txt files by their base name (without extension)
-      const txtFileMap = new Map<string, File>();
-      txtFiles.forEach(file => {
-        const baseName = file.name.replace(/\.txt$/, '');
-        txtFileMap.set(baseName, file);
-      });
-      
-      // Process each image file
-      for (const imageFile of imageFiles) {
-        try {
-          // Convert image to base64
-          const base64 = await new Promise<string>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-              if (e.target?.result) {
-                resolve(e.target.result as string);
-              } else {
-                reject(new Error("Failed to read image file"));
-              }
-            };
-            reader.onerror = () => reject(new Error("Image file read error"));
-            reader.readAsDataURL(imageFile);
-          });
-
-          // Get image dimensions
-          const imageDimensions = await new Promise<{width: number, height: number}>((resolve) => {
-            const img = new Image();
-            img.onload = () => {
-              resolve({ width: img.width, height: img.height });
-            };
-            img.src = base64;
-          });
-
-          // Check for corresponding txt file
-          const imageBaseName = imageFile.name.replace(/\.[^/.]+$/, '');
-          const txtFile = txtFileMap.get(imageBaseName);
-          
-          let annotations: Annotation[] = [];
-          if (txtFile) {
-            try {
-              // Read and parse txt file
-              const txtContent = await new Promise<string>((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                  if (e.target?.result) {
-                    resolve(e.target.result as string);
-                  } else {
-                    reject(new Error("Failed to read txt file"));
-                  }
-                };
-                reader.onerror = () => reject(new Error("Txt file read error"));
-                reader.readAsText(txtFile);
-              });
-
-              // Parse YOLO annotations
-              annotations = parseYoloFile(
-                txtContent, 
-                imageDimensions.width, 
-                imageDimensions.height, 
-                classDefinitions
-              );
-            } catch (error) {
-              console.warn(`Failed to parse annotations for ${imageFile.name}:`, error);
-            }
-          }
-
-          // Create image object
-          const newImage: ImageFile = {
-            id: crypto.randomUUID(),
-            name: imageFile.name,
-            url: base64,
-            type: 'image' as const,
-            size: imageFile.size,
-            uploadDate: new Date(),
-            status: annotations.length > 0 ? 'completed' : 'pending',
-            annotations: annotations.length,
-            annotationData: annotations
-          };
-
-          setImages(prev => [...prev, newImage]);
-        } catch (error) {
-          console.error("Error processing file:", imageFile.name, error);
-        }
-      }
+      const uploadedImages = await imageDBService.uploadDirectory(files, projectId, classDefinitions);
+      setImages(prev => [...prev, ...uploadedImages]);
     } catch (error) {
-      console.error("Error uploading directory:", error);
+      console.error('Error uploading directory:', error);
+      setLastError(error instanceof Error ? error.message : 'Failed to upload directory');
     } finally {
       setIsLoading(false);
     }
   };
 
+  const getStorageStats = async () => {
+    try {
+      return await imageDBService.getStorageInfo();
+    } catch (error) {
+      console.error('Failed to get storage stats:', error);
+      return { used: 0, total: 0, available: 0 };
+    }
+  };
+
+  const cleanupOrphanedData = () => {
+    // This function is now handled by the database automatically
+    // Keep for backward compatibility
+    return { cleaned: 0, errors: [] };
+  };
+
   return { 
-    images, 
+    images,
+    files: images, // Alias for backward compatibility
     uploadFiles, 
     uploadDirectory,
     updateImageStatus, 
@@ -261,6 +209,11 @@ export const useFileManager = (projectId: string) => {
     updateImageAnnotationData,
     deleteImage, 
     clearAllImages,
-    isLoading 
+    isLoading,
+    lastError,
+    clearError: () => setLastError(null),
+    // Storage management functions
+    getStorageStats,
+    cleanupOrphanedData
   };
 };

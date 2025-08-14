@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Download, FileArchive, FileText } from "lucide-react";
 import { useFileManager, ImageFile, Annotation } from "@/features/file/hooks/useFileManager";
 import { YoloProject } from "@/features/project/types";
+import { imageDBService } from "@/services/imageDb";
 import JSZip from "jszip";
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
@@ -27,15 +28,14 @@ export const ExportPanel = ({ projectId, currentProject, images: passedImages }:
   
   
 
-  // Convert base64 image to blob
-  const base64ToBlob = (base64: string): Blob => {
-    const byteCharacters = atob(base64.split(',')[1]);
-    const byteNumbers = new Array(byteCharacters.length);
-    for (let i = 0; i < byteCharacters.length; i++) {
-      byteNumbers[i] = byteCharacters.charCodeAt(i);
+  // Get image blob from IndexedDB
+  const getImageBlob = async (imageId: string): Promise<Blob | null> => {
+    try {
+      return await imageDBService.getImageBlob(imageId);
+    } catch (error) {
+      console.error('Failed to get image blob:', error);
+      return null;
     }
-    const byteArray = new Uint8Array(byteNumbers);
-    return new Blob([byteArray], { type: 'image/jpeg' });
   };
 
   // Convert annotations to YOLO format
@@ -51,14 +51,23 @@ export const ExportPanel = ({ projectId, currentProject, images: passedImages }:
     }).join('\n');
   };
 
-  // Get image dimensions from base64
-  const getImageDimensions = (base64: string): Promise<{width: number, height: number}> => {
-    return new Promise((resolve) => {
+  // Get image dimensions from blob
+  const getImageDimensions = (blob: Blob): Promise<{width: number, height: number}> => {
+    return new Promise((resolve, reject) => {
       const img = new Image();
+      const objectUrl = URL.createObjectURL(blob);
+      
       img.onload = () => {
+        URL.revokeObjectURL(objectUrl);
         resolve({ width: img.width, height: img.height });
       };
-      img.src = base64;
+      
+      img.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        reject(new Error('Failed to load image'));
+      };
+      
+      img.src = objectUrl;
     });
   };
 
@@ -117,15 +126,21 @@ nc: ${classNames.length}
       // Process each image and its annotations
       for (const image of images) {
         try {
+          // Get image blob from IndexedDB
+          const imageBlob = await getImageBlob(image.id);
+          if (!imageBlob) {
+            console.error(`Failed to get blob for image ${image.name}`);
+            continue;
+          }
+          
           // Get image dimensions
-          const dimensions = await getImageDimensions(image.url);
+          const dimensions = await getImageDimensions(imageBlob);
           
           // Extract filename without extension
           const baseName = image.name.replace(/\.[^/.]+$/, "");
           const extension = image.name.split('.').pop() || 'jpg';
           
           // Add image file
-          const imageBlob = base64ToBlob(image.url);
           imagesFolder!.file(`${baseName}.${extension}`, imageBlob);
           
           // Generate annotation file
@@ -192,7 +207,14 @@ nc: ${classNames.length}
       for (const image of images) {
         try {
           if (image.annotationData && image.annotationData.length > 0) {
-            const dimensions = await getImageDimensions(image.url);
+            // Get image blob from IndexedDB
+            const imageBlob = await getImageBlob(image.id);
+            if (!imageBlob) {
+              console.error(`Failed to get blob for image ${image.name}`);
+              continue;
+            }
+            
+            const dimensions = await getImageDimensions(imageBlob);
             const baseName = image.name.replace(/\.[^/.]+$/, "");
             const yoloAnnotations = convertToYoloFormat(image.annotationData, dimensions.width, dimensions.height);
             projectFolder!.file(`${baseName}.txt`, yoloAnnotations);
