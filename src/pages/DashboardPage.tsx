@@ -3,15 +3,17 @@
 import { useProject } from "@/features/project/hooks/useProject";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Plus, Folder, Play, Trash2, MoreVertical } from "lucide-react";
+import { Plus, Folder, Play, Trash2, MoreVertical, Loader2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Progress } from "@/components/ui/progress";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { DeleteProjectDialog } from "@/components/DeleteProjectDialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { AdminOnlyFeature } from "@/components/AdminOnlyFeature";
 import { useRoles } from "@/auth/useRoles";
+import { isImageCompleted } from "@/lib/utils";
+import { imageDBService } from "@/services/imageDb";
 
 const DashboardPage = () => {
   const { projects, createProject, deleteProject } = useProject();
@@ -19,37 +21,96 @@ const DashboardPage = () => {
   const { toast } = useToast();
   const { canDeleteProject } = useRoles();
   const [projectStats, setProjectStats] = useState<{[key: string]: {totalImages: number, completedImages: number, totalAnnotations: number}}>({});
+  const [isLoadingStats, setIsLoadingStats] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [projectToDelete, setProjectToDelete] = useState<{id: string, name: string} | null>(null);
 
-  // Calculate statistics for all projects
-  useEffect(() => {
-    const stats: {[key: string]: {totalImages: number, completedImages: number, totalAnnotations: number}} = {};
+  // Helper function to calculate stats for a single project with better error handling
+  const calculateProjectStats = useCallback(async (projectId: string) => {
+    const defaultStats = { totalImages: 0, completedImages: 0, totalAnnotations: 0 };
     
-    projects.forEach(project => {
-      const savedImages = localStorage.getItem(`project-${project.id}-images`);
-      if (savedImages) {
-        try {
-          const images = JSON.parse(savedImages);
-          const totalImages = images.length;
-          const completedImages = images.filter((img: any) => 
-            img.annotationData && img.annotationData.length > 0
-          ).length;
-          const totalAnnotations = images.reduce((sum: number, img: any) => 
-            sum + (img.annotationData ? img.annotationData.length : 0), 0
-          );
-          
-          stats[project.id] = { totalImages, completedImages, totalAnnotations };
-        } catch (e) {
-          stats[project.id] = { totalImages: 0, completedImages: 0, totalAnnotations: 0 };
-        }
-      } else {
-        stats[project.id] = { totalImages: 0, completedImages: 0, totalAnnotations: 0 };
+    try {
+      // Load images from IndexedDB instead of localStorage
+      const images = await imageDBService.getProjectImages(projectId);
+      
+      if (!Array.isArray(images)) {
+        console.warn(`Invalid image data format for project ${projectId}, expected array`);
+        return defaultStats;
       }
-    });
-    
-    setProjectStats(stats);
-  }, [projects]);
+
+      // Calculate stats with validation
+      const totalImages = images.length;
+      const completedImages = images.filter((img) => {
+        try {
+          return img && img.annotationData && isImageCompleted(img.annotationData);
+        } catch (e) {
+          console.warn(`Invalid annotation data for image ${img?.name || 'unknown'}:`, e);
+          return false;
+        }
+      }).length;
+      
+      const totalAnnotations = images.reduce((sum: number, img) => {
+        try {
+          const annotationData = img?.annotationData;
+          return sum + (Array.isArray(annotationData) ? annotationData.length : 0);
+        } catch (e) {
+          console.warn(`Error counting annotations for image ${img?.name || 'unknown'}:`, e);
+          return sum;
+        }
+      }, 0);
+
+      return { totalImages, completedImages, totalAnnotations };
+    } catch (e) {
+      console.error(`Failed to calculate stats for project ${projectId}:`, e);
+      return defaultStats;
+    }
+  }, []);
+
+  // Calculate statistics for all projects with debouncing and loading states
+  useEffect(() => {
+    const calculateAllStats = async () => {
+      setIsLoadingStats(true);
+      
+      try {
+        // Add small delay to prevent blocking UI and allow for data consistency
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        const stats: {[key: string]: {totalImages: number, completedImages: number, totalAnnotations: number}} = {};
+        
+        // Use Promise.all to calculate stats for all projects concurrently
+        const statsPromises = projects.map(async project => {
+          const projectStats = await calculateProjectStats(project.id);
+          return { projectId: project.id, stats: projectStats };
+        });
+        
+        const statsResults = await Promise.all(statsPromises);
+        
+        // Convert results back to the expected format
+        statsResults.forEach(({ projectId, stats: projectStats }) => {
+          stats[projectId] = projectStats;
+        });
+        
+        setProjectStats(stats);
+      } catch (e) {
+        console.error("Error calculating project statistics:", e);
+        // Set empty stats on error
+        const emptyStats: {[key: string]: {totalImages: number, completedImages: number, totalAnnotations: number}} = {};
+        projects.forEach(project => {
+          emptyStats[project.id] = { totalImages: 0, completedImages: 0, totalAnnotations: 0 };
+        });
+        setProjectStats(emptyStats);
+      } finally {
+        setIsLoadingStats(false);
+      }
+    };
+
+    // Debounce the calculation to prevent too frequent updates
+    const timeoutId = setTimeout(calculateAllStats, 300);
+
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  }, [projects, calculateProjectStats]);
 
   const handleDeleteClick = (projectId: string, projectName: string) => {
     setProjectToDelete({ id: projectId, name: projectName });
@@ -58,7 +119,14 @@ const DashboardPage = () => {
 
   const handleDeleteConfirm = () => {
     if (projectToDelete) {
+      // Remove the project's stats immediately to provide immediate feedback
+      const updatedStats = { ...projectStats };
+      delete updatedStats[projectToDelete.id];
+      setProjectStats(updatedStats);
+      
+      // Delete the project
       deleteProject(projectToDelete.id);
+      
       toast({
         title: "Project deleted",
         description: `"${projectToDelete.name}" has been permanently deleted.`,
@@ -145,15 +213,33 @@ const DashboardPage = () => {
                   {/* Statistics Grid */}
                   <div className="grid grid-cols-3 gap-4">
                     <div className="text-center">
-                      <div className="text-2xl font-bold text-blue-600">{stats.totalImages}</div>
+                      {isLoadingStats ? (
+                        <div className="flex items-center justify-center h-8">
+                          <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+                        </div>
+                      ) : (
+                        <div className="text-2xl font-bold text-blue-600">{stats.totalImages}</div>
+                      )}
                       <p className="text-xs text-gray-600">Total Images</p>
                     </div>
                     <div className="text-center">
-                      <div className="text-2xl font-bold text-green-600">{stats.totalAnnotations}</div>
+                      {isLoadingStats ? (
+                        <div className="flex items-center justify-center h-8">
+                          <Loader2 className="h-4 w-4 animate-spin text-green-600" />
+                        </div>
+                      ) : (
+                        <div className="text-2xl font-bold text-green-600">{stats.totalAnnotations}</div>
+                      )}
                       <p className="text-xs text-gray-600">Annotations</p>
                     </div>
                     <div className="text-center">
-                      <div className="text-2xl font-bold text-purple-600">{percentage}%</div>
+                      {isLoadingStats ? (
+                        <div className="flex items-center justify-center h-8">
+                          <Loader2 className="h-4 w-4 animate-spin text-purple-600" />
+                        </div>
+                      ) : (
+                        <div className="text-2xl font-bold text-purple-600">{percentage}%</div>
+                      )}
                       <p className="text-xs text-gray-600">Progress</p>
                     </div>
                   </div>
@@ -162,9 +248,16 @@ const DashboardPage = () => {
                   <div className="space-y-2">
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-600">Completion</span>
-                      <span className="font-medium">{stats.completedImages}/{stats.totalImages} images</span>
+                      {isLoadingStats ? (
+                        <div className="flex items-center">
+                          <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                          <span className="text-gray-400">Loading...</span>
+                        </div>
+                      ) : (
+                        <span className="font-medium">{stats.completedImages}/{stats.totalImages} images</span>
+                      )}
                     </div>
-                    <Progress value={percentage} className="h-2" />
+                    <Progress value={isLoadingStats ? 0 : percentage} className="h-2" />
                   </div>
                   
                   {/* Action Button */}
