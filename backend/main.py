@@ -215,7 +215,7 @@ async def unassign_user_from_project(
     return await project_service.unassign_user(db, project_id, user_id)
 
 
-@app.post("/projects/{project_id}/images/upload")
+@app.post("/projects/{project_id}/images/upload", response_model=List[ImageResponse])
 async def upload_images(
     project_id: str,
     files: List[UploadFile] = File(...),

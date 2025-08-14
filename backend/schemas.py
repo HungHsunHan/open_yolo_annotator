@@ -148,6 +148,19 @@ class ImageResponse(ImageBase):
     width: Optional[int] = None
     height: Optional[int] = None
     annotations: int = 0  # Count of annotations
+
+    @field_validator('annotations', mode='before')
+    @classmethod
+    def coerce_annotations_count(cls, v):
+        """Coerce relationship list or other types into an integer count for annotations."""
+        if v is None:
+            return 0
+        if isinstance(v, list):
+            return len(v)
+        try:
+            return int(v)
+        except (TypeError, ValueError):
+            return 0
     
     class Config:
         from_attributes = True

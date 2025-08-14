@@ -160,11 +160,21 @@ class ApiClient {
     return this.request<any[]>(`/projects/${projectId}/images`);
   }
 
-  async uploadImages(projectId: string, files: FileList) {
+  async uploadImages(projectId: string, files: FileList | Iterable<File>) {
     const formData = new FormData();
-    Array.from(files).forEach(file => {
-      formData.append('files', file);
-    });
+
+    // Narrow types and append files safely
+    if (typeof (files as any)?.[Symbol.iterator] === 'function' && !(files as FileList).item) {
+      for (const file of files as Iterable<File>) {
+        formData.append('files', file, file.name);
+      }
+    } else {
+      const fl = files as FileList;
+      for (let i = 0; i < fl.length; i++) {
+        const f = fl.item(i);
+        if (f) formData.append('files', f, f.name);
+      }
+    }
 
     const headers: Record<string, string> = {};
     if (this.token) {

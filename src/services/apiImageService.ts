@@ -19,22 +19,52 @@ export interface ImageFile {
 class ApiImageService {
   private imageUrls = new Map<string, string>(); // Track blob URLs for cleanup
 
-  async uploadFiles(files: FileList, projectId: string): Promise<ImageFile[]> {
+  private async buildImageFileFromApi(img: any): Promise<ImageFile> {
+    // Try to download blob with auth and build an object URL
     try {
-      const uploadedImages = await apiClient.uploadImages(projectId, files);
-      
-      // Convert API response to frontend format
-      return uploadedImages.map((img: any) => ({
+      const blob = await apiClient.downloadImage(img.id);
+      const objectUrl = URL.createObjectURL(blob);
+      // Track for cleanup
+      this.imageUrls.set(img.id, objectUrl);
+
+      return {
         id: img.id,
         name: img.name,
-        url: `/api/images/${img.id}/download`, // API endpoint URL
+        url: objectUrl,
         type: 'image' as const,
         size: img.size,
         uploadDate: new Date(img.upload_date),
         status: img.status,
         annotations: img.annotations || 0,
-        annotationData: []
-      }));
+        annotationData: [],
+      };
+    } catch (e) {
+      // Fallback to an inline placeholder if download fails
+      const placeholder =
+        'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMjQgMjQiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2NjYyIgc3Ryb2tlLXdpZHRoPSIyIj48cmVjdCB4PSIzIiB5PSIzIiB3aWR0aD0iMTgiIGhlaWdodD0iMTgiIHJ4PSIyIiByeT0iMiIvPjxjaXJjbGUgY3g9IjguNSIgY3k9IjguNSIgcj0iMS41Ii8+PHBhdGggZD0iTTIxIDE1bC01LTVMNSAyMSIvPjwvc3ZnPg==';
+      return {
+        id: img.id,
+        name: img.name,
+        url: placeholder,
+        type: 'image' as const,
+        size: img.size,
+        uploadDate: new Date(img.upload_date),
+        status: img.status,
+        annotations: img.annotations || 0,
+        annotationData: [],
+      };
+    }
+  }
+
+  async uploadFiles(files: FileList | Iterable<File>, projectId: string): Promise<ImageFile[]> {
+    try {
+      const uploadedImages = await apiClient.uploadImages(projectId, files);
+
+      // Convert API response to frontend format with authorized object URLs
+      const results = await Promise.all(
+        uploadedImages.map((img: any) => this.buildImageFileFromApi(img))
+      );
+      return results;
     } catch (error) {
       console.error('Upload failed:', error);
       throw error;
@@ -42,26 +72,23 @@ class ApiImageService {
   }
 
   async uploadDirectory(
-    files: FileList, 
-    projectId: string, 
+    files: FileList,
+    projectId: string,
     classDefinitions: ClassDefinition[]
   ): Promise<ImageFile[]> {
     const allFiles = Array.from(files);
-    const imageFiles = allFiles.filter(file => file.type.startsWith('image/'));
-    const txtFiles = allFiles.filter(file => file.name.endsWith('.txt'));
+    const imageFiles = allFiles.filter((file) => file.type.startsWith('image/'));
+    const txtFiles = allFiles.filter((file) => file.name.endsWith('.txt'));
 
     // Create a map of txt files by their base name
     const txtFileMap = new Map<string, File>();
-    txtFiles.forEach(file => {
+    txtFiles.forEach((file) => {
       const baseName = file.name.replace(/\.txt$/, '');
       txtFileMap.set(baseName, file);
     });
 
     // First upload all images
-    const uploadedImages = await this.uploadFiles(
-      Object.assign(imageFiles, { length: imageFiles.length }) as FileList,
-      projectId
-    );
+    const uploadedImages = await this.uploadFiles(imageFiles, projectId);
 
     // Then process annotations for uploaded images
     for (const imageFile of uploadedImages) {
@@ -73,10 +100,10 @@ class ApiImageService {
         if (txtFile) {
           try {
             const txtContent = await this.readTextFile(txtFile);
-            
+
             // Get image dimensions by downloading the image
             const imageDimensions = await this.getImageDimensions(imageFile.url);
-            
+
             const annotations = parseYoloFile(
               txtContent,
               imageDimensions.width,
@@ -106,18 +133,15 @@ class ApiImageService {
   async getProjectImages(projectId: string): Promise<ImageFile[]> {
     try {
       const images = await apiClient.getProjectImages(projectId);
-      
-      return images.map((img: any) => ({
-        id: img.id,
-        name: img.name,
-        url: `/api/images/${img.id}/download`,
-        type: 'image' as const,
-        size: img.size,
-        uploadDate: new Date(img.upload_date),
-        status: img.status,
-        annotations: img.annotations || 0,
-        annotationData: [] // Will be loaded separately when needed
-      }));
+
+      // Revoke any existing object URLs before rebuilding list
+      this.imageUrls.forEach((url) => URL.revokeObjectURL(url));
+      this.imageUrls.clear();
+
+      const results = await Promise.all(
+        images.map((img: any) => this.buildImageFileFromApi(img))
+      );
+      return results;
     } catch (error) {
       console.error('Failed to load project images:', error);
       throw error;
@@ -125,7 +149,7 @@ class ApiImageService {
   }
 
   async updateImageAnnotations(
-    imageId: string, 
+    imageId: string,
     annotationData: Annotation[]
   ): Promise<void> {
     try {
@@ -148,7 +172,7 @@ class ApiImageService {
   async deleteImage(imageId: string): Promise<void> {
     try {
       await apiClient.deleteImage(imageId);
-      
+
       // Clean up any cached URLs
       const objectUrl = this.imageUrls.get(imageId);
       if (objectUrl) {
@@ -165,12 +189,12 @@ class ApiImageService {
     try {
       // Get all images first to clean up URLs
       const images = await this.getProjectImages(projectId);
-      
+
       // Delete each image
-      await Promise.all(images.map(img => this.deleteImage(img.id)));
-      
+      await Promise.all(images.map((img) => this.deleteImage(img.id)));
+
       // Clean up any remaining URLs
-      images.forEach(image => {
+      images.forEach((image) => {
         const objectUrl = this.imageUrls.get(image.id);
         if (objectUrl) {
           URL.revokeObjectURL(objectUrl);
@@ -189,7 +213,7 @@ class ApiImageService {
     return {
       used: 0,
       total: 1000 * 1024 * 1024, // 1GB placeholder
-      available: 1000 * 1024 * 1024
+      available: 1000 * 1024 * 1024,
     };
   }
 
@@ -203,7 +227,8 @@ class ApiImageService {
   }
 
   // Helper function to get image dimensions from API image
-  private async getImageDimensions(imageUrl: string): Promise<{width: number, height: number}> {
+  private async getImageDimensions(imageUrl: string): Promise<{ width: number; height: number }> {
+    // Note: imageUrl may be an object URL now
     return new Promise((resolve, reject) => {
       const img = new Image();
       img.onload = () => {
@@ -233,7 +258,7 @@ class ApiImageService {
 
   // Cleanup function to revoke all object URLs (call on app unmount)
   cleanup(): void {
-    this.imageUrls.forEach(url => {
+    this.imageUrls.forEach((url) => {
       URL.revokeObjectURL(url);
     });
     this.imageUrls.clear();
