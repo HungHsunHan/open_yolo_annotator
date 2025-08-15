@@ -24,3 +24,12 @@ dist-ssr
 *.sw?
 CLAUDE.md
 .env
+
+# Python cache files
+*.pyc
+__pycache__/
+*.pyo
+*.pyd
+
+# Claude settings
+.claude/settings.local.json
