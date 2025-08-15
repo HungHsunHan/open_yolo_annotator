@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { ClassDefinition } from "@/features/project/types";
 import { apiImageService } from "@/services/apiImageService";
 import type { ImageFile } from "@/services/apiImageService";
@@ -104,22 +104,35 @@ export const useFileManager = (projectId: string) => {
     ));
   };
 
-  const updateImageAnnotationData = async (imageId: string, annotationData: Annotation[]) => {
+  const updateImageAnnotationData = useCallback(async (imageId: string, annotationData: Annotation[]) => {
+    console.log(`[useFileManager] Updating annotation data for image ${imageId} with ${annotationData.length} annotations`);
+    
     try {
       await apiImageService.updateImageAnnotations(imageId, annotationData);
+      
+      // Update local state only after successful API call
       setImages(prev => prev.map(img => 
         img.id === imageId ? { 
           ...img, 
           annotations: annotationData.length,
           annotationData,
-          status: 'completed' // Update status based on annotations
+          status: annotationData.length > 0 ? 'completed' : 'pending' // Update status based on annotations
         } : img
       ));
+      
+      console.log(`[useFileManager] Successfully updated annotation data for image ${imageId}`);
+      
+      // Clear any previous errors
+      setLastError(null);
     } catch (error) {
-      console.error('Failed to update image annotations:', error);
-      setLastError('Failed to save annotations');
+      const errorMessage = error instanceof Error ? error.message : 'Failed to save annotations';
+      console.error(`[useFileManager] Failed to update image annotations for ${imageId}:`, error);
+      setLastError(errorMessage);
+      
+      // Re-throw error so calling components can handle it
+      throw error;
     }
-  };
+  }, []); // Empty dependency array since all dependencies are stable
 
   const deleteImage = async (imageId: string) => {
     try {
