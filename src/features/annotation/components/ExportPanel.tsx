@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Download, FileArchive, FileText } from "lucide-react";
 import { useFileManager, ImageFile, Annotation } from "@/features/file/hooks/useFileManager";
 import { YoloProject } from "@/features/project/types";
-import { imageDBService } from "@/services/imageDb";
+import { apiImageService } from "@/services/apiImageService";
 import JSZip from "jszip";
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
@@ -28,10 +28,10 @@ export const ExportPanel = ({ projectId, currentProject, images: passedImages }:
   
   
 
-  // Get image blob from IndexedDB
+  // Get image blob from API service
   const getImageBlob = async (imageId: string): Promise<Blob | null> => {
     try {
-      return await imageDBService.getImageBlob(imageId);
+      return await apiImageService.getImageBlob(imageId);
     } catch (error) {
       console.error('Failed to get image blob:', error);
       return null;
@@ -126,7 +126,7 @@ nc: ${classNames.length}
       // Process each image and its annotations
       for (const image of images) {
         try {
-          // Get image blob from IndexedDB
+          // Get image blob from API service
           const imageBlob = await getImageBlob(image.id);
           if (!imageBlob) {
             console.error(`Failed to get blob for image ${image.name}`);
@@ -207,7 +207,7 @@ nc: ${classNames.length}
       for (const image of images) {
         try {
           if (image.annotationData && image.annotationData.length > 0) {
-            // Get image blob from IndexedDB
+            // Get image blob from API service
             const imageBlob = await getImageBlob(image.id);
             if (!imageBlob) {
               console.error(`Failed to get blob for image ${image.name}`);

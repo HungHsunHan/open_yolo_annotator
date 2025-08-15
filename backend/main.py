@@ -58,7 +58,7 @@ STORAGE_DIR.mkdir(exist_ok=True)
 
 # Services
 file_service = FileService(STORAGE_DIR)
-project_service = ProjectService()
+project_service = ProjectService(STORAGE_DIR)
 user_service = UserService()
 
 

@@ -13,7 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { AdminOnlyFeature } from "@/components/AdminOnlyFeature";
 import { useRoles } from "@/auth/useRoles";
 import { isImageCompleted } from "@/lib/utils";
-import { imageDBService } from "@/services/imageDb";
+import { apiImageService } from "@/services/apiImageService";
 
 const DashboardPage = () => {
   const { projects, createProject, deleteProject } = useProject();
@@ -30,8 +30,8 @@ const DashboardPage = () => {
     const defaultStats = { totalImages: 0, completedImages: 0, totalAnnotations: 0 };
     
     try {
-      // Load images from IndexedDB instead of localStorage
-      const images = await imageDBService.getProjectImages(projectId);
+      // Load images from API service (SQLite backend)
+      const images = await apiImageService.getProjectImages(projectId);
       
       if (!Array.isArray(images)) {
         console.warn(`Invalid image data format for project ${projectId}, expected array`);

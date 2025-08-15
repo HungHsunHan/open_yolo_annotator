@@ -196,15 +196,34 @@ class ApiClient {
   }
 
   async downloadImage(imageId: string): Promise<Blob> {
-    const response = await fetch(`${this.baseUrl}/images/${imageId}/download`, {
-      headers: this.getHeaders(),
-    });
+    const url = `${this.baseUrl}/images/${imageId}/download`;
+    const headers = this.getHeaders();
+    
+    console.log(`[apiClient] Downloading image from: ${url}`);
+    console.log(`[apiClient] Request headers:`, headers);
+    console.log(`[apiClient] Auth token present:`, this.token ? 'YES' : 'NO');
+    
+    try {
+      const response = await fetch(url, {
+        headers,
+      });
 
-    if (!response.ok) {
-      throw new Error(`Failed to download image: ${response.status}`);
+      console.log(`[apiClient] Download response status: ${response.status} ${response.statusText}`);
+      console.log(`[apiClient] Download response headers:`, Object.fromEntries(response.headers.entries()));
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => 'Unable to read error response');
+        console.error(`[apiClient] Download failed with status ${response.status}:`, errorText);
+        throw new Error(`Failed to download image: ${response.status} - ${errorText}`);
+      }
+
+      const blob = await response.blob();
+      console.log(`[apiClient] Successfully downloaded blob: ${blob.size} bytes, type: ${blob.type}`);
+      return blob;
+    } catch (error) {
+      console.error(`[apiClient] Download error for image ${imageId}:`, error);
+      throw error;
     }
-
-    return response.blob();
   }
 
   async updateImage(imageId: string, updates: any) {

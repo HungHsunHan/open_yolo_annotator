@@ -21,13 +21,20 @@ class ApiImageService {
 
   private async buildImageFileFromApi(img: any): Promise<ImageFile> {
     // Try to download blob with auth and build an object URL
+    console.log(`[apiImageService] Attempting to download image: ${img.id} (${img.name})`);
+    
     try {
+      console.log(`[apiImageService] Calling apiClient.downloadImage for ${img.id}`);
       const blob = await apiClient.downloadImage(img.id);
+      console.log(`[apiImageService] Successfully downloaded blob for ${img.id}, size: ${blob.size} bytes, type: ${blob.type}`);
+      
       const objectUrl = URL.createObjectURL(blob);
+      console.log(`[apiImageService] Created object URL for ${img.id}: ${objectUrl}`);
+      
       // Track for cleanup
       this.imageUrls.set(img.id, objectUrl);
 
-      return {
+      const imageFile = {
         id: img.id,
         name: img.name,
         url: objectUrl,
@@ -38,8 +45,19 @@ class ApiImageService {
         annotations: img.annotations || 0,
         annotationData: [],
       };
+      
+      console.log(`[apiImageService] Built image file object for ${img.id}:`, imageFile);
+      return imageFile;
     } catch (e) {
+      console.error(`[apiImageService] Failed to download image ${img.id} (${img.name}):`, e);
+      console.error(`[apiImageService] Error details:`, {
+        message: e instanceof Error ? e.message : String(e),
+        stack: e instanceof Error ? e.stack : undefined,
+        imageData: img
+      });
+      
       // Fallback to an inline placeholder if download fails
+      console.warn(`[apiImageService] Using placeholder for ${img.id} due to download failure`);
       const placeholder =
         'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMjQgMjQiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2NjYyIgc3Ryb2tlLXdpZHRoPSIyIj48cmVjdCB4PSIzIiB5PSIzIiB3aWR0aD0iMTgiIGhlaWdodD0iMTgiIHJ4PSIyIiByeT0iMiIvPjxjaXJjbGUgY3g9IjguNSIgY3k9IjguNSIgcj0iMS41Ii8+PHBhdGggZD0iTTIxIDE1bC01LTVMNSAyMSIvPjwvc3ZnPg==';
       return {
@@ -132,15 +150,20 @@ class ApiImageService {
 
   async getProjectImages(projectId: string): Promise<ImageFile[]> {
     try {
+      console.log(`[apiImageService] Getting images for project: ${projectId}`);
       const images = await apiClient.getProjectImages(projectId);
+      console.log(`[apiImageService] Received ${images.length} images from API:`, images);
 
       // Revoke any existing object URLs before rebuilding list
       this.imageUrls.forEach((url) => URL.revokeObjectURL(url));
       this.imageUrls.clear();
 
+      console.log(`[apiImageService] Processing ${images.length} images to build image files...`);
       const results = await Promise.all(
         images.map((img: any) => this.buildImageFileFromApi(img))
       );
+      
+      console.log(`[apiImageService] Successfully processed ${results.length} images:`, results);
       return results;
     } catch (error) {
       console.error('Failed to load project images:', error);

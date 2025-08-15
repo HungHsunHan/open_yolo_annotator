@@ -18,20 +18,11 @@ export interface Annotation {
 
 export type { ImageFile };
 
-// Helper function to validate if project exists
+// Helper function to validate if project exists - now handled by API validation
 const validateProjectExists = (projectId: string): boolean => {
-  if (!projectId) return false;
-  
-  const savedProjects = localStorage.getItem('yolo-projects');
-  if (!savedProjects) return false;
-  
-  try {
-    const projects = JSON.parse(savedProjects);
-    return projects.some((p: { id: string }) => p.id === projectId);
-  } catch (e) {
-    console.error("Failed to validate project existence:", e);
-    return false;
-  }
+  // Projects are now managed by the API, so we just check if projectId is provided
+  // The API will handle project existence and access control validation
+  return !!projectId;
 };
 
 export const useFileManager = (projectId: string) => {
@@ -46,9 +37,7 @@ export const useFileManager = (projectId: string) => {
     if (projectId) {
       // Validate project exists before loading images
       if (!validateProjectExists(projectId)) {
-        const error = `Project ${projectId} does not exist or cannot be found`;
-        console.warn(error);
-        setLastError(error);
+        console.warn(`Invalid project ID: ${projectId}`);
         setImages([]);
         return;
       }

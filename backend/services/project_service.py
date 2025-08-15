@@ -1,12 +1,19 @@
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
-from models import Project, User, project_assignments
+from models import Project, User, project_assignments, Image
 from schemas import ProjectCreate, ProjectResponse, ProjectUpdate, DirectoryStructure
 import uuid
+import shutil
+from pathlib import Path
 from typing import List
 
 
 class ProjectService:
+    
+    def __init__(self, storage_dir: Path):
+        self.storage_dir = storage_dir
+        self.images_dir = storage_dir / "images"
+        self.annotations_dir = storage_dir / "annotations"
     
     async def create_project(self, db: Session, project_data: ProjectCreate, created_by: str) -> Project:
         """Create a new project"""
@@ -130,9 +137,23 @@ class ProjectService:
             )
         
         try:
+            # Clean up physical files before deleting from database
+            project_image_dir = self.images_dir / project_id
+            project_annotation_dir = self.annotations_dir / project_id
+            
             # Delete project (cascade will handle images and annotations)
             db.delete(project)
             db.commit()
+            
+            # Clean up physical directories after successful database deletion
+            try:
+                if project_image_dir.exists():
+                    shutil.rmtree(project_image_dir)
+                if project_annotation_dir.exists():
+                    shutil.rmtree(project_annotation_dir)
+            except Exception as e:
+                # Log the error but don't fail the deletion
+                print(f"Warning: Failed to clean up storage for project {project_id}: {str(e)}")
             
             return {"message": "Project deleted successfully"}
         except Exception as e:
