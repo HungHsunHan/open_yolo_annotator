@@ -241,14 +241,55 @@ class ApiClient {
 
   // Annotation endpoints
   async saveAnnotations(imageId: string, annotations: any[]) {
+    // Transform frontend camelCase to backend snake_case
+    const transformedAnnotations = annotations.map(annotation => ({
+      class_id: annotation.classId,
+      class_name: annotation.className,
+      color: annotation.color,
+      x: annotation.x,
+      y: annotation.y,
+      width: annotation.width,
+      height: annotation.height,
+    }));
+
+    console.log('[apiClient] Saving annotations:', {
+      imageId,
+      originalCount: annotations.length,
+      transformedCount: transformedAnnotations.length,
+      sampleOriginal: annotations[0],
+      sampleTransformed: transformedAnnotations[0]
+    });
+
     return this.request(`/images/${imageId}/annotations`, {
       method: 'POST',
-      body: JSON.stringify(annotations),
+      body: JSON.stringify(transformedAnnotations),
     });
   }
 
   async getAnnotations(imageId: string) {
-    return this.request<any[]>(`/images/${imageId}/annotations`);
+    const backendAnnotations = await this.request<any[]>(`/images/${imageId}/annotations`);
+    
+    // Transform backend snake_case to frontend camelCase
+    const transformedAnnotations = backendAnnotations.map(annotation => ({
+      id: annotation.id,
+      classId: annotation.class_id,
+      className: annotation.class_name,
+      color: annotation.color,
+      x: annotation.x,
+      y: annotation.y,
+      width: annotation.width,
+      height: annotation.height,
+    }));
+
+    console.log('[apiClient] Loaded annotations:', {
+      imageId,
+      backendCount: backendAnnotations.length,
+      transformedCount: transformedAnnotations.length,
+      sampleBackend: backendAnnotations[0],
+      sampleTransformed: transformedAnnotations[0]
+    });
+
+    return transformedAnnotations;
   }
 
   async downloadAnnotations(imageId: string): Promise<Blob> {

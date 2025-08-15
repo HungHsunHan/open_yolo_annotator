@@ -1,7 +1,6 @@
 "use client";
 
 import { useParams, useNavigate } from "react-router-dom";
-import { YoloEditor } from "@/features/annotation/components/YoloEditor";
 import { ClassManager } from "@/features/project/components/ClassManager";
 import { ProjectAssignments } from "@/features/project/components/ProjectAssignments";
 import { ExportPanel } from "@/features/annotation/components/ExportPanel";
@@ -18,6 +17,9 @@ import { useRoles } from "@/auth/useRoles";
 import { DeleteImageDialog } from "@/components/DeleteImageDialog";
 import { ClearAllImagesDialog } from "@/components/ClearAllImagesDialog";
 import { useToast } from "@/hooks/use-toast";
+import { useSimpleCollaboration } from "@/features/collaboration/hooks/useSimpleCollaboration";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Users, AlertTriangle } from "lucide-react";
 // Collaboration features temporarily disabled
 // import { UserPresence } from "@/features/collaboration/components/UserPresence";
 // import { ImageStatusIndicator, ImageStatusBadge } from "@/features/collaboration/components/ImageStatusIndicator";
@@ -39,16 +41,14 @@ export const ProjectPage = () => {
   
   const { images, uploadFiles, uploadDirectory, updateImageStatus, deleteImage, clearAllImages, isLoading } = useFileManager(id || "");
   
-  // Temporarily disable collaboration features for debugging
-  const shouldInitializeCollaboration = false; // currentProject && id;
-  // const collaborationResult = useCollaboration(shouldInitializeCollaboration ? id : "", images);
-  const { assignImage, canAssign, getImageStatus, activeUsers, state: collaborationState } = {
-    assignImage: async () => false, 
-    canAssign: () => false, 
-    getImageStatus: () => ({ status: 'available' as const }),
-    activeUsers: [],
-    state: null
-  };
+  // Use simple collaboration system instead of complex one
+  const {
+    canAccess,
+    accessDeniedReason,
+    activeUsers,
+    isInitialized: collaborationInitialized,
+    updateCurrentImage
+  } = useSimpleCollaboration(id || "");
 
   // Handle project loading state
   useEffect(() => {
@@ -214,6 +214,29 @@ export const ProjectPage = () => {
 
   return (
     <div className="space-y-6">
+      {/* Access Control Warning */}
+      {collaborationInitialized && !canAccess && (
+        <Alert>
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>
+            {accessDeniedReason === 'max_users_reached' 
+              ? `This project is currently at its maximum capacity (2 users). Active users: ${activeUsers.join(', ')}. Please wait for a user to leave before accessing the project.`
+              : 'You cannot access this project at the moment. Please try again later.'
+            }
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Active Users Indicator */}
+      {collaborationInitialized && canAccess && activeUsers.length > 1 && (
+        <Alert>
+          <Users className="h-4 w-4" />
+          <AlertDescription>
+            {activeUsers.length} users currently working on this project: {activeUsers.join(', ')}
+          </AlertDescription>
+        </Alert>
+      )}
+
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold">{currentProject.name}</h1>

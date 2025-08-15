@@ -45,6 +45,17 @@ class ApiImageService {
         annotations: img.annotations || 0,
         annotationData: [],
       };
+
+      // Load existing annotations for this image
+      try {
+        const existingAnnotations = await apiClient.getAnnotations(img.id);
+        imageFile.annotationData = existingAnnotations;
+        imageFile.annotations = existingAnnotations.length;
+        console.log(`[apiImageService] Loaded ${existingAnnotations.length} annotations for image ${img.id}`);
+      } catch (error) {
+        console.warn(`[apiImageService] Failed to load annotations for image ${img.id}:`, error);
+        // Keep empty annotations as fallback
+      }
       
       console.log(`[apiImageService] Built image file object for ${img.id}:`, imageFile);
       return imageFile;
@@ -60,7 +71,7 @@ class ApiImageService {
       console.warn(`[apiImageService] Using placeholder for ${img.id} due to download failure`);
       const placeholder =
         'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMjQgMjQiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2NjYyIgc3Ryb2tlLXdpZHRoPSIyIj48cmVjdCB4PSIzIiB5PSIzIiB3aWR0aD0iMTgiIGhlaWdodD0iMTgiIHJ4PSIyIiByeT0iMiIvPjxjaXJjbGUgY3g9IjguNSIgY3k9IjguNSIgcj0iMS41Ii8+PHBhdGggZD0iTTIxIDE1bC01LTVMNSAyMSIvPjwvc3ZnPg==';
-      return {
+      const fallbackImageFile = {
         id: img.id,
         name: img.name,
         url: placeholder,
@@ -71,6 +82,19 @@ class ApiImageService {
         annotations: img.annotations || 0,
         annotationData: [],
       };
+
+      // Load existing annotations for this image even with placeholder
+      try {
+        const existingAnnotations = await apiClient.getAnnotations(img.id);
+        fallbackImageFile.annotationData = existingAnnotations;
+        fallbackImageFile.annotations = existingAnnotations.length;
+        console.log(`[apiImageService] Loaded ${existingAnnotations.length} annotations for placeholder image ${img.id}`);
+      } catch (error) {
+        console.warn(`[apiImageService] Failed to load annotations for placeholder image ${img.id}:`, error);
+        // Keep empty annotations as fallback
+      }
+
+      return fallbackImageFile;
     }
   }
 
@@ -175,11 +199,20 @@ class ApiImageService {
     imageId: string,
     annotationData: Annotation[]
   ): Promise<void> {
+    console.log(`[apiImageService] Saving ${annotationData.length} annotations for image ${imageId}`);
+    console.log(`[apiImageService] Sample annotation data:`, annotationData[0]);
+    
     try {
       await apiClient.saveAnnotations(imageId, annotationData);
+      console.log(`[apiImageService] Successfully saved ${annotationData.length} annotations for image ${imageId}`);
     } catch (error) {
-      console.error('Failed to save annotations:', error);
-      throw error;
+      console.error(`[apiImageService] Failed to save annotations for image ${imageId}:`, {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        annotationCount: annotationData.length,
+        sampleData: annotationData[0]
+      });
+      throw new Error(`Failed to save annotations: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 

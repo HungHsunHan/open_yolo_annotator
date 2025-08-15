@@ -9,6 +9,7 @@ import { apiImageService } from "@/services/apiImageService";
 import JSZip from "jszip";
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
+import { annotationsToYoloString } from "@/lib/yolo-parser";
 
 interface ExportPanelProps {
   projectId?: string;
@@ -145,7 +146,7 @@ nc: ${classNames.length}
           
           // Generate annotation file
           if (image.annotationData && image.annotationData.length > 0) {
-            const yoloAnnotations = convertToYoloFormat(image.annotationData, dimensions.width, dimensions.height);
+            const yoloAnnotations = annotationsToYoloString(image.annotationData, dimensions.width, dimensions.height);
             labelsFolder!.file(`${baseName}.txt`, yoloAnnotations);
           } else {
             // Create empty annotation file for images without annotations
@@ -216,7 +217,7 @@ nc: ${classNames.length}
             
             const dimensions = await getImageDimensions(imageBlob);
             const baseName = image.name.replace(/\.[^/.]+$/, "");
-            const yoloAnnotations = convertToYoloFormat(image.annotationData, dimensions.width, dimensions.height);
+            const yoloAnnotations = annotationsToYoloString(image.annotationData, dimensions.width, dimensions.height);
             projectFolder!.file(`${baseName}.txt`, yoloAnnotations);
           }
         } catch (error) {

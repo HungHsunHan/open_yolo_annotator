@@ -50,3 +50,22 @@ export interface CollaborationState {
   conflicts: ConflictResolution[];
   lastSync: Date;
 }
+
+export interface SimpleCollaborationState {
+  projectId: string;
+  activeUsers: {
+    userId: string;
+    username: string;
+    sessionId: string;
+    lastActivity: Date;
+    currentImageId?: string;
+  }[];
+  maxUsers: number; // Set to 2 for simple race condition prevention
+  lastSync: Date;
+}
+
+export interface ProjectAccessResult {
+  allowed: boolean;
+  reason?: 'max_users_reached' | 'already_active' | 'project_not_found';
+  currentUsers?: string[];
+}
