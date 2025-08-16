@@ -3,7 +3,7 @@ import uuid
 from contextlib import asynccontextmanager
 
 from models import Base, User, UserRole
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -20,6 +20,14 @@ engine = create_engine(
     connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {}
 )
 
+# Enable foreign key constraints for SQLite
+if "sqlite" in DATABASE_URL:
+    @event.listens_for(engine, "connect")
+    def set_sqlite_pragma(dbapi_connection, connection_record):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
@@ -30,6 +38,42 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+def cleanup_orphaned_records():
+    """Clean up orphaned image records that reference deleted files"""
+    from pathlib import Path
+    from models import Image
+    
+    db = SessionLocal()
+    orphaned_count = 0
+    
+    try:
+        # Get all images from database
+        images = db.query(Image).all()
+        
+        for image in images:
+            file_path = Path(image.file_path)
+            
+            # Check if the file actually exists
+            if not file_path.exists():
+                print(f"Removing orphaned image record: {image.id} ({image.name}) - file not found at {image.file_path}")
+                db.delete(image)
+                orphaned_count += 1
+        
+        if orphaned_count > 0:
+            db.commit()
+            print(f"Cleaned up {orphaned_count} orphaned image records")
+        else:
+            print("No orphaned image records found")
+            
+    except Exception as e:
+        print(f"Error cleaning up orphaned records: {e}")
+        db.rollback()
+    finally:
+        db.close()
+    
+    return orphaned_count
 
 
 def init_database():
@@ -51,7 +95,7 @@ def init_database():
             admin_user = User(
                 id="admin-1",
                 username="tcci",
-                password_hash=hash_password("tcc1"),
+                password_hash=hash_password("tcc"),
                 role=UserRole.ADMIN
             )
             
@@ -68,7 +112,7 @@ def init_database():
             db.commit()
             
             print("Created default users:")
-            print("  Admin: tcci / tcc1")
+            print("  Admin: tcci / tcc")
             print("  Annotator: tcc / tcc")
             
     except Exception as e:
@@ -76,6 +120,9 @@ def init_database():
         db.rollback()
     finally:
         db.close()
+        
+    # Clean up any orphaned records after database initialization
+    cleanup_orphaned_records()
 
 
 if __name__ == "__main__":

@@ -27,52 +27,83 @@ class FileService:
         uploaded_by: str
     ) -> List[Image]:
         """Upload multiple images to project"""
+        print(f"[FileService] Starting upload of {len(files)} files for project {project_id}")
+        
         # Verify project exists
         project = db.query(Project).filter(Project.id == project_id).first()
         if not project:
+            print(f"[FileService] Project {project_id} not found")
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Project not found"
             )
         
-        # Create project-specific directory
+        # Create project-specific directory with proper permissions
         project_dir = self.images_dir / project_id
-        project_dir.mkdir(exist_ok=True)
+        try:
+            project_dir.mkdir(exist_ok=True, mode=0o755)
+            print(f"[FileService] Created/verified project directory: {project_dir}")
+        except Exception as e:
+            print(f"[FileService] Failed to create project directory: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to create storage directory: {str(e)}"
+            )
         
         uploaded_images = []
         failed_files = []
+        uploaded_file_paths = []  # Track files for cleanup on error
         
         for file in files:
             try:
+                print(f"[FileService] Processing file: {file.filename} (type: {file.content_type})")
+                
                 # Validate file type
                 if not file.content_type or not file.content_type.startswith('image/'):
-                    failed_files.append({"filename": file.filename, "error": "Not an image file"})
+                    error_msg = f"Not an image file (type: {file.content_type})"
+                    print(f"[FileService] File validation failed for {file.filename}: {error_msg}")
+                    failed_files.append({"filename": file.filename, "error": error_msg})
                     continue
                 
                 # Generate unique filename
                 image_id = str(uuid.uuid4())
-                file_extension = Path(file.filename).suffix
+                file_extension = Path(file.filename).suffix.lower()
                 storage_filename = f"{image_id}{file_extension}"
                 file_path = project_dir / storage_filename
                 
+                print(f"[FileService] Saving file {file.filename} as {storage_filename}")
+                
                 # Save file to disk
-                with open(file_path, "wb") as buffer:
-                    content = await file.read()
-                    buffer.write(content)
+                try:
+                    with open(file_path, "wb") as buffer:
+                        content = await file.read()
+                        buffer.write(content)
+                    uploaded_file_paths.append(file_path)  # Track for cleanup
+                    print(f"[FileService] Successfully wrote file: {file_path} ({len(content)} bytes)")
+                except Exception as e:
+                    error_msg = f"Failed to save file: {str(e)}"
+                    print(f"[FileService] File save failed for {file.filename}: {error_msg}")
+                    failed_files.append({"filename": file.filename, "error": error_msg})
+                    continue
                 
                 # Get image dimensions
+                width, height = None, None
                 try:
                     with PILImage.open(file_path) as img:
                         width, height = img.size
-                except Exception:
-                    width, height = None, None
+                    print(f"[FileService] Image dimensions for {file.filename}: {width}x{height}")
+                except Exception as e:
+                    print(f"[FileService] Warning: Could not get dimensions for {file.filename}: {e}")
+                
+                # Use relative path for database storage
+                relative_file_path = f"storage/images/{project_id}/{storage_filename}"
                 
                 # Create database record
                 image = Image(
                     id=image_id,
                     project_id=project_id,
                     name=file.filename,
-                    file_path=str(file_path),
+                    file_path=relative_file_path,  # Store relative path
                     size=len(content),
                     type=file.content_type,
                     uploaded_by=uploaded_by,
@@ -81,28 +112,54 @@ class FileService:
                     height=height
                 )
                 
-                db.add(image)
+                print(f"[FileService] Created image record: {image_id} with path {relative_file_path}")
                 uploaded_images.append(image)
                 
             except Exception as e:
-                failed_files.append({"filename": file.filename, "error": str(e)})
+                error_msg = f"Unexpected error processing file: {str(e)}"
+                print(f"[FileService] Unexpected error for {file.filename}: {error_msg}")
+                failed_files.append({"filename": file.filename, "error": error_msg})
         
-        try:
-            db.commit()
-            for image in uploaded_images:
-                db.refresh(image)
-        except Exception as e:
-            db.rollback()
-            # Clean up uploaded files on database error
-            for image in uploaded_images:
-                try:
-                    Path(image.file_path).unlink(missing_ok=True)
-                except Exception:
-                    pass
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Database error: {str(e)}"
-            )
+        # Only commit to database if we have successfully uploaded images
+        if uploaded_images:
+            try:
+                # Add all images to session
+                for image in uploaded_images:
+                    db.add(image)
+                
+                # Commit transaction
+                db.commit()
+                
+                # Refresh objects to get updated data
+                for image in uploaded_images:
+                    db.refresh(image)
+                
+                print(f"[FileService] Successfully committed {len(uploaded_images)} images to database")
+                
+            except Exception as e:
+                print(f"[FileService] Database commit failed: {e}")
+                db.rollback()
+                
+                # Clean up uploaded files on database error
+                for file_path in uploaded_file_paths:
+                    try:
+                        file_path.unlink(missing_ok=True)
+                        print(f"[FileService] Cleaned up file: {file_path}")
+                    except Exception as cleanup_error:
+                        print(f"[FileService] Failed to cleanup file {file_path}: {cleanup_error}")
+                
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Database error: {str(e)}"
+                )
+        
+        # Log results
+        if failed_files:
+            print(f"[FileService] Upload completed with {len(uploaded_images)} successes and {len(failed_files)} failures")
+            for failure in failed_files:
+                print(f"[FileService] Failed: {failure['filename']} - {failure['error']}")
+        else:
+            print(f"[FileService] Upload completed successfully: {len(uploaded_images)} files")
         
         return uploaded_images
     
@@ -111,14 +168,26 @@ class FileService:
         """Download image file"""
         image = await self._get_accessible_image(db, image_id, current_user)
         
-        if not Path(image.file_path).exists():
+        # Convert relative path to absolute path based on storage directory
+        if image.file_path.startswith('storage/'):
+            # Remove 'storage/' prefix and resolve relative to storage_dir
+            relative_path = image.file_path[8:]  # Remove 'storage/' prefix
+            abs_file_path = self.storage_dir / relative_path
+        else:
+            # Legacy absolute path format
+            abs_file_path = Path(image.file_path)
+        
+        print(f"[FileService] Downloading image {image_id}: {abs_file_path}")
+        
+        if not abs_file_path.exists():
+            print(f"[FileService] Image file not found: {abs_file_path}")
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Image file not found on disk"
             )
         
         return FileResponse(
-            path=image.file_path,
+            path=str(abs_file_path),
             filename=image.name,
             media_type=image.type
         )
@@ -154,8 +223,17 @@ class FileService:
         image = await self._get_accessible_image(db, image_id, current_user)
         
         try:
+            # Convert relative path to absolute path for file deletion
+            if image.file_path.startswith('storage/'):
+                # New relative path format
+                abs_file_path = Path(image.file_path)
+            else:
+                # Legacy absolute path format
+                abs_file_path = Path(image.file_path)
+            
             # Delete file from disk
-            Path(image.file_path).unlink(missing_ok=True)
+            abs_file_path.unlink(missing_ok=True)
+            print(f"[FileService] Deleted file: {abs_file_path}")
             
             # Delete from database (cascade will handle annotations)
             db.delete(image)
@@ -164,6 +242,7 @@ class FileService:
             return {"message": "Image deleted successfully"}
         except Exception as e:
             db.rollback()
+            print(f"[FileService] Failed to delete image {image_id}: {e}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Failed to delete image: {str(e)}"

@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 from typing import List, Optional
+from contextlib import asynccontextmanager
 
 import uvicorn
 from database import get_db
@@ -35,8 +36,21 @@ from auth import (
     hash_password,
     verify_token,
 )
+from database import init_database
 
-app = FastAPI(title="YOLO Annotation API", version="1.0.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan events"""
+    # Startup
+    print("Initializing database and cleaning up orphaned records...")
+    init_database()
+    print("Database initialization complete.")
+    yield
+    # Shutdown (if needed)
+
+
+app = FastAPI(title="YOLO Annotation API", version="1.0.0", lifespan=lifespan)
 
 # Configure CORS
 app.add_middleware(
@@ -50,11 +64,16 @@ app.add_middleware(
 # Security
 security = HTTPBearer()
 
-# File storage setup
+# File storage setup with proper permissions
 STORAGE_DIR = Path("storage")
-STORAGE_DIR.mkdir(exist_ok=True)
-(STORAGE_DIR / "images").mkdir(exist_ok=True)
-(STORAGE_DIR / "annotations").mkdir(exist_ok=True)
+try:
+    STORAGE_DIR.mkdir(exist_ok=True, mode=0o755)
+    (STORAGE_DIR / "images").mkdir(exist_ok=True, mode=0o755)
+    (STORAGE_DIR / "annotations").mkdir(exist_ok=True, mode=0o755)
+    print(f"Storage directories initialized: {STORAGE_DIR.absolute()}")
+except Exception as e:
+    print(f"Warning: Failed to create storage directories: {e}")
+    raise
 
 # Services
 file_service = FileService(STORAGE_DIR)

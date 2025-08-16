@@ -19,12 +19,12 @@ class TokenResponse(BaseModel):
 
 # User schemas
 class UserBase(BaseModel):
-    username: str
+    username: str = Field(min_length=1, description="Username cannot be empty")
     role: UserRole
 
 
 class UserCreate(UserBase):
-    password: str
+    password: str = Field(min_length=1, description="Password cannot be empty")
 
 
 class UserUpdate(BaseModel):
@@ -57,7 +57,7 @@ class DirectoryStructure(BaseModel):
 
 
 class ProjectBase(BaseModel):
-    name: str
+    name: str = Field(min_length=1, description="Project name cannot be empty")
     class_names: List[str] = Field(default_factory=lambda: ["object"]) 
     class_definitions: List[ClassDefinition] = Field(default_factory=list)
 
