@@ -157,6 +157,9 @@ export class CoordinationService {
 
   // Session management
   async registerSession(projectId: string): Promise<UserSession> {
+    // First, perform immediate cleanup of inactive sessions and expired assignments
+    await this.cleanupInactiveSessions(projectId);
+    
     const now = new Date();
     const session: UserSession = {
       userId: this.currentUserId,
@@ -171,9 +174,23 @@ export class CoordinationService {
     await this.updateCollaborationState(projectId, (state) => {
       // Remove any old sessions for the same user to prevent duplicates
       const cleanedSessions: Record<string, UserSession> = {};
+      const cleanedAssignments = { ...state.assignments };
+      
       Object.entries(state.activeSessions).forEach(([sessionId, existingSession]) => {
         if (existingSession.username !== this.currentUsername) {
           cleanedSessions[sessionId] = existingSession;
+        } else {
+          // Release any assignments from old sessions of the same user
+          Object.entries(state.assignments).forEach(([imageId, assignment]) => {
+            if (assignment.assignedTo === this.currentUsername) {
+              cleanedAssignments[imageId] = {
+                ...assignment,
+                status: 'available',
+                assignedTo: '',
+                lastActivity: now
+              };
+            }
+          });
         }
       });
 
@@ -182,7 +199,8 @@ export class CoordinationService {
         activeSessions: {
           ...cleanedSessions,
           [this.currentSessionId]: session
-        }
+        },
+        assignments: cleanedAssignments
       };
     });
 
@@ -212,7 +230,7 @@ export class CoordinationService {
   }
 
   async cleanupInactiveSessions(projectId: string): Promise<void> {
-    const inactivityThreshold = 2 * 60 * 1000; // 2 minutes (more aggressive)
+    const inactivityThreshold = 3 * 1000; // 3 seconds for faster cleanup
     const now = new Date();
 
     await this.updateCollaborationState(projectId, (state) => {
@@ -360,7 +378,7 @@ export class CoordinationService {
     
     this.heartbeatInterval = window.setInterval(() => {
       // Heartbeat will be updated by the collaboration hook when active
-    }, 30000); // 30 seconds
+    }, 3000); // 3 seconds for faster detection
   }
 
   private startSyncTimer(): void {
@@ -380,7 +398,47 @@ export class CoordinationService {
       if (event.newValue) {
         try {
           const newState = JSON.parse(event.newValue);
-          this.notifyListeners(newState);
+          
+          // Convert date strings back to Date objects
+          const processedState = {
+            ...newState,
+            lastSync: new Date(newState.lastSync),
+            activeSessions: Object.fromEntries(
+              Object.entries(newState.activeSessions || {}).map(([key, session]: [string, any]) => [
+                key,
+                {
+                  ...session,
+                  lastHeartbeat: new Date(session.lastHeartbeat),
+                  loginTime: new Date(session.loginTime || session.lastHeartbeat)
+                }
+              ])
+            ),
+            assignments: Object.fromEntries(
+              Object.entries(newState.assignments || {}).map(([key, assignment]: [string, any]) => [
+                key,
+                {
+                  ...assignment,
+                  assignedAt: new Date(assignment.assignedAt),
+                  lockedUntil: new Date(assignment.lockedUntil),
+                  lastActivity: new Date(assignment.lastActivity)
+                }
+              ])
+            ),
+            activities: (newState.activities || []).map((activity: any) => ({
+              ...activity,
+              timestamp: new Date(activity.timestamp)
+            }))
+          };
+          
+          // Check if the change affects our current session
+          const ourSession = processedState.activeSessions[this.currentSessionId];
+          if (!ourSession && this.currentUsername) {
+            // Our session was removed, possibly due to logout in another tab
+            console.log('Current session was removed from collaboration state, cleaning up...');
+            this.cleanup();
+          }
+          
+          this.notifyListeners(processedState);
         } catch (error) {
           console.error('Failed to parse storage change:', error);
         }

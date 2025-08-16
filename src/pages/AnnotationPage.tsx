@@ -47,6 +47,14 @@ export const AnnotationPage = () => {
   const pathParts = window.location.pathname.split('/');
   const projectId = pathParts[2];
   
+  // Add project-level access control
+  const {
+    canAccess: projectCanAccess,
+    accessDeniedReason: projectAccessDeniedReason,
+    activeUsers: projectActiveUsers,
+    isInitialized: projectCollaborationInitialized
+  } = useSimpleCollaboration(projectId || "");
+  
   const { images, updateImageStatus, updateImageAnnotations, updateImageAnnotationData, isLoading } = useFileManager(projectId || "");
   const { projects } = useProject();
   const { 
@@ -364,13 +372,45 @@ export const AnnotationPage = () => {
     }
   }
 
+  // Check project-level access - redirect if denied
+  useEffect(() => {
+    if (projectCollaborationInitialized && !projectCanAccess && projectId) {
+      console.log('Project access denied, redirecting to project page');
+      navigate(`/project/${projectId}`, { replace: true });
+    }
+  }, [projectCollaborationInitialized, projectCanAccess, projectId, navigate]);
+
   // Show loading state while images are being fetched
-  if (isLoading) {
+  if (isLoading || !projectCollaborationInitialized) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <h1 className="text-2xl font-bold mb-4">Loading...</h1>
           <p className="text-gray-600">Loading images and annotations</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Block access if project is locked
+  if (projectCollaborationInitialized && !projectCanAccess) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center max-w-md mx-auto">
+          <div className="w-20 h-20 mx-auto mb-4 bg-red-100 rounded-full flex items-center justify-center">
+            <ArrowLeft className="h-10 w-10 text-red-500" />
+          </div>
+          <h1 className="text-2xl font-bold mb-4">Project Access Denied</h1>
+          <p className="text-gray-600 mb-6">
+            {projectAccessDeniedReason === 'project_locked' 
+              ? `This project is currently being edited by ${projectActiveUsers.join(', ')}. Only one user can edit a project at a time.`
+              : 'You cannot access this project at the moment.'
+            }
+          </p>
+          <Button onClick={() => navigate(`/project/${projectId}`)}>
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back to Project
+          </Button>
         </div>
       </div>
     );
@@ -585,6 +625,9 @@ export const AnnotationPage = () => {
             <Button onClick={handleComplete}>
               <CheckCircle2 className="h-4 w-4 mr-1" />
               Complete
+            </Button>
+            <Button variant="outline" onClick={() => navigate(`/project/${projectId}`)}>
+              Exit
             </Button>
             <Button 
               variant="ghost" 

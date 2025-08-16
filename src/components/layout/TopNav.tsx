@@ -32,7 +32,7 @@ export const TopNav = () => {
   };
 
   return (
-    <header className="bg-background dark:bg-card border-b border-border">
+    <header className="bg-background border-b border-border">
       <div className="flex items-center justify-between h-16 px-6">
         <div className="flex items-center">
           <h2 className="text-lg font-semibold text-foreground">Project Dashboard</h2>

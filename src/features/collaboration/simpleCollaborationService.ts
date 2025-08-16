@@ -63,11 +63,12 @@ export class SimpleCollaborationService {
       };
     }
 
-    // Check if we've reached the limit
+    // Check if we've reached the limit (project-level exclusive access)
     if (activeUsers.length >= state.maxUsers) {
+      const activeUser = activeUsers[0];
       return {
         allowed: false,
-        reason: 'max_users_reached',
+        reason: 'project_locked',
         currentUsers: activeUsers.map(u => u.username)
       };
     }
@@ -135,7 +136,7 @@ export class SimpleCollaborationService {
     return {
       projectId,
       activeUsers: [],
-      maxUsers: 2, // Simple limit: only 2 users can work on a project simultaneously
+      maxUsers: 1, // Project-level exclusive access: only 1 user can work on a project at a time
       lastSync: new Date()
     };
   }
@@ -150,10 +151,10 @@ export class SimpleCollaborationService {
       clearInterval(this.heartbeatInterval);
     }
     
-    // Update heartbeat every 30 seconds
+    // Update heartbeat every 3 seconds for faster detection
     this.heartbeatInterval = window.setInterval(() => {
       // This will be called by the hook to update activity
-    }, 30000);
+    }, 3000);
   }
 
   private handleStorageChange(event: StorageEvent): void {

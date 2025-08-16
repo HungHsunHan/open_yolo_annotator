@@ -30,6 +30,7 @@ export const useProject = () => {
           createdAt: new Date(p.created_at),
           updatedAt: new Date(p.updated_at),
           assignedUsers: p.assigned_users || [],
+          classNames: p.class_names || [],
           classDefinitions: p.class_definitions || []
         }));
         setAllProjects(parsedProjects);

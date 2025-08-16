@@ -61,7 +61,7 @@ export const useSimpleCollaboration = (projectId: string) => {
       } catch (error) {
         console.error('Failed to update collaboration state:', error);
       }
-    }, 30000); // Update every 30 seconds
+    }, 3000); // Update every 3 seconds for faster detection
 
     return () => clearInterval(interval);
   }, [isInitialized, accessResult?.allowed, projectId]);

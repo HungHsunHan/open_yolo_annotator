@@ -214,25 +214,15 @@ export const ProjectPage = () => {
 
   return (
     <div className="space-y-6">
-      {/* Access Control Warning */}
+      {/* Project Locked Alert */}
       {collaborationInitialized && !canAccess && (
-        <Alert>
-          <AlertTriangle className="h-4 w-4" />
-          <AlertDescription>
-            {accessDeniedReason === 'max_users_reached' 
-              ? `This project is currently at its maximum capacity (2 users). Active users: ${activeUsers.join(', ')}. Please wait for a user to leave before accessing the project.`
+        <Alert className="border-red-200 bg-red-50">
+          <AlertTriangle className="h-4 w-4 text-red-500" />
+          <AlertDescription className="text-red-700">
+            {accessDeniedReason === 'project_locked' 
+              ? `This project is currently being edited by ${activeUsers.join(', ')}. Only one user can edit a project at a time. Please wait for them to finish.`
               : 'You cannot access this project at the moment. Please try again later.'
             }
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {/* Active Users Indicator */}
-      {collaborationInitialized && canAccess && activeUsers.length > 1 && (
-        <Alert>
-          <Users className="h-4 w-4" />
-          <AlertDescription>
-            {activeUsers.length} users currently working on this project: {activeUsers.join(', ')}
           </AlertDescription>
         </Alert>
       )}
@@ -243,11 +233,18 @@ export const ProjectPage = () => {
           <p className="text-sm text-gray-500">
             Last updated: {currentProject.updatedAt.toLocaleDateString()}
           </p>
+          {!canAccess && collaborationInitialized && (
+            <p className="text-sm text-red-600 font-medium mt-1">
+              🔒 Project locked by {activeUsers.join(', ')}
+            </p>
+          )}
         </div>
         <Button onClick={() => navigate('/dashboard')}>Back to Dashboard</Button>
       </div>
       
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+      {/* Only show project content if user has access */}
+      {(!collaborationInitialized || canAccess) && (
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         <div className="lg:col-span-3 space-y-6">
           {/* Upload Area */}
           <Card>
@@ -286,15 +283,15 @@ export const ProjectPage = () => {
             </CardHeader>
             <CardContent>
               <div 
-                className="border-2 border-dashed rounded-lg p-6 text-center border-blue-300 bg-blue-50"
+                className="border-2 border-dashed rounded-lg p-6 text-center border-blue-300 bg-blue-50 cursor-pointer hover:bg-blue-100 transition-colors"
                 onClick={() => directoryInputRef.current?.click()}
               >
-                <ImageIcon className="mx-auto h-10 w-10 text-blue-400 mb-3" />
-                <p className="text-md font-medium mb-1">Upload directory with images + annotations</p>
-                <p className="text-sm text-gray-600 mb-2">
+                <ImageIcon className="mx-auto h-10 w-10 text-blue-500 mb-3" />
+                <p className="text-md font-medium mb-1 text-gray-800">Upload directory with images + annotations</p>
+                <p className="text-sm text-gray-700 mb-2">
                   Select a folder containing images (.jpg, .png) and corresponding YOLO format annotations (.txt)
                 </p>
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-gray-600">
                   Example: image1.jpg + image1.txt, image2.png + image2.txt
                 </p>
                 <input
@@ -366,7 +363,7 @@ export const ProjectPage = () => {
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                   {currentImages.map((image) => {
                     return (
-                    <div key={image.id} className="group relative">
+                    <div key={image.id} className="group relative" data-testid="image-thumbnail">
                       <div className={`border-2 rounded-lg overflow-hidden ${getStatusColor(image.status)}`}>
                         
                         <div className="aspect-square bg-gray-200 flex items-center justify-center">
@@ -483,7 +480,34 @@ export const ProjectPage = () => {
           <ProjectAssignments projectId={id!} />
           <ExportPanel projectId={id} currentProject={currentProject} images={images} />
         </div>
-      </div>
+        </div>
+      )}
+      
+      {/* Blocked State - Show when project is locked */}
+      {collaborationInitialized && !canAccess && (
+        <div className="text-center py-12 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+          <div className="max-w-md mx-auto">
+            <div className="w-20 h-20 mx-auto mb-4 bg-red-100 rounded-full flex items-center justify-center">
+              <AlertTriangle className="h-10 w-10 text-red-500" />
+            </div>
+            <h3 className="text-xl font-semibold mb-2 text-gray-900">Project Currently in Use</h3>
+            <p className="text-gray-600 mb-6">
+              {activeUsers.length > 0 
+                ? `${activeUsers.join(', ')} is currently editing this project. Only one user can edit a project at a time.`
+                : 'This project is currently being edited by another user.'
+              }
+            </p>
+            <div className="space-y-3">
+              <p className="text-sm text-gray-500">
+                The project will become available when the current user finishes editing.
+              </p>
+              <Button variant="outline" onClick={() => window.location.reload()}>
+                Refresh to Check Availability
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
       
       {/* Delete Image Confirmation Dialog */}
       <DeleteImageDialog

@@ -27,7 +27,7 @@ const Index = () => {
           <p className="text-lg text-gray-600 mb-8">
             Create and manage your YOLO object detection datasets with ease
           </p>
-          <Button size="lg" onClick={() => setIsCreateDialogOpen(true)}>
+          <Button size="lg" onClick={() => setIsCreateDialogOpen(true)} data-testid="create-project-button">
             <Plus className="mr-2 h-5 w-5" />
             Create New Project
           </Button>

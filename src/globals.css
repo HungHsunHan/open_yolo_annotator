@@ -52,48 +52,49 @@
   }
 
   .dark {
-    /* Softer dark backgrounds - using grays instead of pure black */
-    --background: 240 10% 8%;        /* Very dark blue-gray instead of black */
-    --foreground: 240 5% 85%;        /* Comfortable off-white with slight blue tint */
+    /* Rich dark backgrounds with purple-blue tones */
+    --background: 240 15% 6%;        /* Deep purple-blue background */
+    --foreground: 240 5% 95%;        /* Much brighter white with minimal tint */
 
-    --card: 240 10% 12%;             /* Slightly lighter than background */
-    --card-foreground: 240 5% 85%;   /* Comfortable off-white for cards */
+    --card: 245 20% 10%;             /* Deep blue-purple cards */
+    --card-foreground: 240 5% 95%;   /* Much brighter text for cards */
 
-    --popover: 240 10% 12%;
-    --popover-foreground: 240 5% 85%;
+    --popover: 245 20% 10%;
+    --popover-foreground: 240 5% 95%;
 
-    /* Primary colors - using blue theme */
-    --primary: 217 91% 60%;          /* Blue primary */
-    --primary-foreground: 240 10% 95%; /* Soft off-white on blue */
+    /* Vibrant primary colors - bright blue */
+    --primary: 210 100% 60%;         /* Bright electric blue */
+    --primary-foreground: 240 15% 95%; /* Clean white on blue */
 
-    /* Secondary/muted areas */
-    --secondary: 240 6% 18%;         /* Medium gray */
-    --secondary-foreground: 240 5% 80%; /* Comfortable light gray text */
+    /* Secondary with purple accent */
+    --secondary: 280 30% 18%;        /* Purple-tinted secondary */
+    --secondary-foreground: 280 8% 92%; /* Much brighter purple-tinted text */
 
-    --muted: 240 6% 16%;             /* Darker muted background */
-    --muted-foreground: 240 5% 60%;  /* Medium contrast gray text */
+    --muted: 250 25% 14%;            /* Purple-blue muted background */
+    --muted-foreground: 250 8% 78%; /* Higher contrast purple-gray text */
 
-    --accent: 240 6% 18%;
-    --accent-foreground: 240 5% 85%;
+    /* Cyan accent for variety */
+    --accent: 180 80% 20%;           /* Dark cyan accent background */
+    --accent-foreground: 180 50% 92%; /* Much brighter cyan text */
 
-    /* Better destructive colors */
-    --destructive: 0 75% 55%;        /* Brighter red for visibility */
-    --destructive-foreground: 240 10% 95%; /* Soft off-white on red */
+    /* Vibrant destructive colors */
+    --destructive: 350 80% 60%;      /* Bright red-pink for visibility */
+    --destructive-foreground: 350 20% 95%; /* Clean white on red */
 
-    /* Borders and inputs */
-    --border: 240 6% 20%;            /* Subtle borders */
-    --input: 240 6% 16%;             /* Input backgrounds */
-    --ring: 217 91% 60%;             /* Focus ring matches primary */
+    /* Enhanced borders with color */
+    --border: 250 30% 22%;           /* Purple-tinted borders */
+    --input: 245 25% 15%;            /* Purple-blue input backgrounds */
+    --ring: 210 100% 60%;            /* Bright blue focus ring */
 
-    /* Sidebar colors */
-    --sidebar-background: 240 8% 14%; /* Slightly different from main bg */
-    --sidebar-foreground: 240 5% 82%; /* Comfortable sidebar text */
-    --sidebar-primary: 217 91% 60%;   /* Blue accent */
-    --sidebar-primary-foreground: 240 10% 95%; /* Soft off-white */
-    --sidebar-accent: 240 6% 20%;     /* Hover states */
-    --sidebar-accent-foreground: 240 5% 85%; /* Comfortable hover text */
-    --sidebar-border: 240 6% 22%;     /* Sidebar borders */
-    --sidebar-ring: 217 91% 60%;
+    /* Colorful sidebar with gradients */
+    --sidebar-background: 245 25% 12%; /* Rich blue-purple sidebar */
+    --sidebar-foreground: 245 8% 92%; /* Much brighter sidebar text */
+    --sidebar-primary: 210 100% 60%;   /* Electric blue accent */
+    --sidebar-primary-foreground: 240 15% 95%; /* Clean white */
+    --sidebar-accent: 280 40% 22%;     /* Purple hover states */
+    --sidebar-accent-foreground: 280 12% 94%; /* Much brighter purple text */
+    --sidebar-border: 250 35% 25%;     /* Colorful sidebar borders */
+    --sidebar-ring: 210 100% 60%;
   }
 }
 
@@ -104,5 +105,22 @@
 
   body {
     @apply bg-background text-foreground;
+  }
+
+  /* Enhanced contrast for gray text in dark mode */
+  .dark .text-gray-600 {
+    color: rgb(203 213 225); /* Much brighter than default gray-600 */
+  }
+
+  .dark .text-gray-500 {
+    color: rgb(226 232 240); /* Much brighter than default gray-500 */
+  }
+
+  .dark .text-gray-400 {
+    color: rgb(203 213 225); /* Brighter than default gray-400 */
+  }
+
+  .dark .text-gray-300 {
+    color: rgb(241 245 249); /* Very bright for gray-300 */
   }
 }

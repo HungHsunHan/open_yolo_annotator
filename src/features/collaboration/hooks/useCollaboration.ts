@@ -83,7 +83,7 @@ export const useCollaboration = (projectId: string, images: ImageFile[] = []) =>
           console.error('Heartbeat failed:', error);
         }
       }
-    }, 30000); // 30 seconds
+    }, 15000); // 15 seconds (more frequent heartbeat)
 
     // Start cleanup timer
     if (cleanupInterval.current) {
@@ -96,7 +96,7 @@ export const useCollaboration = (projectId: string, images: ImageFile[] = []) =>
       } catch (error) {
         console.error('Cleanup failed:', error);
       }
-    }, 60000); // 1 minute
+    }, 10000); // 10 seconds (more frequent cleanup)
 
     return () => {
       if (heartbeatInterval.current) {

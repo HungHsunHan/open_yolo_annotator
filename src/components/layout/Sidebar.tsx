@@ -61,6 +61,7 @@ export const Sidebar = () => {
           variant="ghost" 
           className="w-full justify-start text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
           onClick={handleLogout}
+          data-testid="logout-button"
         >
           <LogOut className="mr-2 h-4 w-4" />
           Logout

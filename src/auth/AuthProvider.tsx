@@ -153,6 +153,58 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   };
 
   const logout = () => {
+    // Clear user session from collaboration system before logout
+    if (user) {
+      try {
+        // Clear all collaboration sessions for this user across all projects
+        Object.keys(localStorage).forEach(key => {
+          if (key.startsWith('collaboration-')) {
+            try {
+              const collaborationData = JSON.parse(localStorage.getItem(key) || '{}');
+              if (collaborationData.activeSessions) {
+                // Remove all sessions for the current user
+                const cleanedSessions: any = {};
+                Object.entries(collaborationData.activeSessions).forEach(([sessionId, session]: [string, any]) => {
+                  if (session.username !== user.username) {
+                    cleanedSessions[sessionId] = session;
+                  }
+                });
+                
+                // Release all assignments for this user
+                const cleanedAssignments: any = {};
+                Object.entries(collaborationData.assignments || {}).forEach(([imageId, assignment]: [string, any]) => {
+                  if (assignment.assignedTo === user.username) {
+                    // Release assignment
+                    cleanedAssignments[imageId] = {
+                      ...assignment,
+                      status: 'available',
+                      assignedTo: '',
+                      lastActivity: new Date().toISOString()
+                    };
+                  } else {
+                    cleanedAssignments[imageId] = assignment;
+                  }
+                });
+                
+                // Update localStorage with cleaned data
+                const updatedData = {
+                  ...collaborationData,
+                  activeSessions: cleanedSessions,
+                  assignments: cleanedAssignments,
+                  lastSync: new Date().toISOString()
+                };
+                localStorage.setItem(key, JSON.stringify(updatedData));
+              }
+            } catch (error) {
+              console.error('Failed to clean collaboration data for key:', key, error);
+            }
+          }
+        });
+      } catch (error) {
+        console.error('Failed to clean collaboration sessions during logout:', error);
+      }
+    }
+    
     setUser(null);
     apiClient.setToken(null);
     localStorage.removeItem("user");

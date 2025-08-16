@@ -60,12 +60,13 @@ export interface SimpleCollaborationState {
     lastActivity: Date;
     currentImageId?: string;
   }[];
-  maxUsers: number; // Set to 2 for simple race condition prevention
+  maxUsers: number; // Set to 1 for project-level exclusive access
   lastSync: Date;
 }
 
 export interface ProjectAccessResult {
   allowed: boolean;
-  reason?: 'max_users_reached' | 'already_active' | 'project_not_found';
+  reason?: 'project_locked' | 'user_actively_editing' | 'already_active' | 'project_not_found';
   currentUsers?: string[];
+  activeUser?: string; // The user currently editing the project
 }
