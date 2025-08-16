@@ -29,6 +29,7 @@ import { useAuth } from "@/auth/AuthProvider";
 import { KonvaAnnotationCanvas } from "@/components/KonvaAnnotationCanvas";
 import { HTMLCanvasAnnotation } from "@/components/HTMLCanvasAnnotation";
 import { downloadYoloAnnotations } from "@/lib/yolo-parser";
+import { useToast } from "@/hooks/use-toast";
 
 
 const DEFAULT_COLORS = [
@@ -40,6 +41,7 @@ export const AnnotationPage = () => {
   const { imageId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { toast } = useToast();
   
   // Get project ID from URL
   const pathParts = window.location.pathname.split('/');
@@ -131,11 +133,11 @@ export const AnnotationPage = () => {
           setAnnotations([]);
         }
         
-        // Reset flag after state update
+        // Reset flag after state update with sufficient time for async operations
         setTimeout(() => {
           isLoadingAnnotationsRef.current = false;
           console.log('[AnnotationPage] Annotation loading flag reset - saves can now proceed');
-        }, 100);
+        }, 500);
       }
     }
     
@@ -174,7 +176,16 @@ export const AnnotationPage = () => {
         console.log(`[AnnotationPage] Successfully saved ${annotations.length} annotations`);
       } catch (error) {
         console.error('[AnnotationPage] Failed to save annotations:', error);
-        // TODO: Show user-friendly error message
+        
+        // Show user-friendly error message
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+        console.warn(`Failed to save annotations: ${errorMessage}`);
+        
+        toast({
+          title: "Failed to save annotations",
+          description: `Error: ${errorMessage}. Please try again.`,
+          variant: "destructive",
+        });
       } finally {
         setIsSaving(false);
       }
