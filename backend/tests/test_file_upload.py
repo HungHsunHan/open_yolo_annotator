@@ -294,6 +294,86 @@ class TestImageAccess:
         assert test_img is not None
         assert test_img["name"] == test_image.name
         assert test_img["project_id"] == test_project.id
+
+    def test_get_project_images_with_pagination(self, client, auth_headers_admin, test_project, test_db_session):
+        """Test retrieving images with pagination parameters"""
+        from models import Image
+        
+        # Create multiple test images for pagination testing
+        images = []
+        for i in range(5):
+            image = Image(
+                id=f"test-image-{i}",
+                name=f"test-image-{i}.jpg",
+                project_id=test_project.id,
+                file_path=f"storage/images/{test_project.id}/test-image-{i}.jpg",
+                size=1024 * (i + 1),
+                type="image/jpeg",
+                uploaded_by=test_project.created_by,
+                status="pending"
+            )
+            images.append(image)
+            test_db_session.add(image)
+        test_db_session.commit()
+        
+        # Test first page with limit 2
+        response = client.get(f"/projects/{test_project.id}/images?page=1&limit=2", headers=auth_headers_admin)
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert len(data) == 2
+        
+        # Test second page
+        response = client.get(f"/projects/{test_project.id}/images?page=2&limit=2", headers=auth_headers_admin)
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert len(data) == 2
+        
+        # Test third page
+        response = client.get(f"/projects/{test_project.id}/images?page=3&limit=2", headers=auth_headers_admin)
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert len(data) >= 1  # At least 1 image (might include original test_image)
+        
+        # Test page beyond available data
+        response = client.get(f"/projects/{test_project.id}/images?page=10&limit=2", headers=auth_headers_admin)
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert len(data) == 0
+
+    def test_get_project_images_count(self, client, auth_headers_admin, test_project, test_db_session):
+        """Test getting total count of images in project"""
+        from models import Image
+        
+        # Get initial count
+        response = client.get(f"/projects/{test_project.id}/images/count", headers=auth_headers_admin)
+        assert response.status_code == status.HTTP_200_OK
+        initial_count = response.json()["count"]
+        
+        # Add some images
+        for i in range(3):
+            image = Image(
+                id=f"count-test-image-{i}",
+                name=f"count-test-{i}.jpg",
+                project_id=test_project.id,
+                file_path=f"storage/images/{test_project.id}/count-test-{i}.jpg",
+                size=1024,
+                type="image/jpeg",
+                uploaded_by=test_project.created_by,
+                status="pending"
+            )
+            test_db_session.add(image)
+        test_db_session.commit()
+        
+        # Check updated count
+        response = client.get(f"/projects/{test_project.id}/images/count", headers=auth_headers_admin)
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["count"] == initial_count + 3
+
+    def test_get_project_images_count_nonexistent_project(self, client, auth_headers_admin):
+        """Test getting count for nonexistent project"""
+        response = client.get("/projects/nonexistent-id/images/count", headers=auth_headers_admin)
+        assert response.status_code == status.HTTP_404_NOT_FOUND
     
     
     def test_get_project_images_empty_project(self, client, auth_headers_admin, test_db_session):

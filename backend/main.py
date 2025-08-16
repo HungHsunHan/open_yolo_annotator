@@ -248,17 +248,36 @@ async def upload_images(
     return await file_service.upload_images(db, project_id, files, current_user.id)
 
 
-@app.get("/projects/{project_id}/images", response_model=List[ImageResponse])
-async def get_project_images(
+@app.get("/projects/{project_id}/images/count")
+async def get_project_images_count(
     project_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Get images for project"""
+    """Get total count of images for project"""
     # Verify user has access to project
     await project_service.get_project(db, project_id, current_user)
     
-    return db.query(Image).filter(Image.project_id == project_id).all()
+    return {"count": db.query(Image).filter(Image.project_id == project_id).count()}
+
+
+@app.get("/projects/{project_id}/images", response_model=List[ImageResponse])
+async def get_project_images(
+    project_id: str,
+    page: int = 1,
+    limit: int = 20,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Get images for project with pagination"""
+    # Verify user has access to project
+    await project_service.get_project(db, project_id, current_user)
+    
+    # Calculate offset
+    offset = (page - 1) * limit
+    
+    # Apply pagination
+    return db.query(Image).filter(Image.project_id == project_id).offset(offset).limit(limit).all()
 
 
 @app.get("/images/{image_id}/download")

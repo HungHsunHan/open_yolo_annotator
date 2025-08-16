@@ -18,6 +18,7 @@ export interface ImageFile {
 
 class ApiImageService {
   private imageUrls = new Map<string, string>(); // Track blob URLs for cleanup
+  private imageCache = new Map<string, ImageFile>(); // Cache loaded images
 
   private async buildImageFileFromApi(img: any): Promise<ImageFile> {
     // Try to download blob with auth and build an object URL
@@ -172,19 +173,38 @@ class ApiImageService {
     return uploadedImages;
   }
 
+  // Cache-aware image building
+  private async getCachedOrBuildImage(img: any): Promise<ImageFile> {
+    const cached = this.imageCache.get(img.id);
+    if (cached) {
+      console.log(`[apiImageService] Using cached image: ${img.id}`);
+      return cached;
+    }
+
+    const imageFile = await this.buildImageFileFromApi(img);
+    this.imageCache.set(img.id, imageFile);
+    return imageFile;
+  }
+
   async getProjectImages(projectId: string): Promise<ImageFile[]> {
     try {
       console.log(`[apiImageService] Getting images for project: ${projectId}`);
       const images = await apiClient.getProjectImages(projectId);
       console.log(`[apiImageService] Received ${images.length} images from API:`, images);
 
-      // Revoke any existing object URLs before rebuilding list
-      this.imageUrls.forEach((url) => URL.revokeObjectURL(url));
-      this.imageUrls.clear();
+      // Only revoke URLs not in cache to avoid unnecessary re-downloads
+      const existingIds = new Set(images.map((img: any) => img.id));
+      this.imageUrls.forEach((url, id) => {
+        if (!existingIds.has(id)) {
+          URL.revokeObjectURL(url);
+          this.imageUrls.delete(id);
+          this.imageCache.delete(id);
+        }
+      });
 
       console.log(`[apiImageService] Processing ${images.length} images to build image files...`);
       const results = await Promise.all(
-        images.map((img: any) => this.buildImageFileFromApi(img))
+        images.map((img: any) => this.getCachedOrBuildImage(img))
       );
       
       console.log(`[apiImageService] Successfully processed ${results.length} images:`, results);
@@ -193,6 +213,68 @@ class ApiImageService {
       console.error('Failed to load project images:', error);
       throw error;
     }
+  }
+
+  async getProjectImagesPaginated(projectId: string, page: number = 1, limit: number = 20): Promise<ImageFile[]> {
+    try {
+      console.log(`[apiImageService] Getting images for project: ${projectId}, page: ${page}, limit: ${limit}`);
+      const images = await apiClient.getProjectImages(projectId, page, limit);
+      console.log(`[apiImageService] Received ${images.length} images from API:`, images);
+
+      console.log(`[apiImageService] Processing ${images.length} images to build image files...`);
+      const results = await Promise.all(
+        images.map((img: any) => this.getCachedOrBuildImage(img))
+      );
+      
+      console.log(`[apiImageService] Successfully processed ${results.length} images:`, results);
+      return results;
+    } catch (error) {
+      console.error('Failed to load project images:', error);
+      throw error;
+    }
+  }
+
+  async getProjectImagesCount(projectId: string): Promise<number> {
+    try {
+      const response = await apiClient.getProjectImagesCount(projectId);
+      return response.count;
+    } catch (error) {
+      console.error('[apiImageService] Error getting project images count:', error);
+      throw error;
+    }
+  }
+
+  // Clean up method to revoke unused URLs
+  cleanupUnusedUrls() {
+    console.log(`[apiImageService] Cleaning up ${this.imageUrls.size} cached URLs`);
+    this.imageUrls.forEach((url, id) => {
+      URL.revokeObjectURL(url);
+    });
+    this.imageUrls.clear();
+    this.imageCache.clear();
+  }
+
+  // Clean up specific images that are no longer needed
+  cleanupImages(keepImageIds: Set<string>) {
+    let cleaned = 0;
+    this.imageUrls.forEach((url, id) => {
+      if (!keepImageIds.has(id)) {
+        URL.revokeObjectURL(url);
+        this.imageUrls.delete(id);
+        this.imageCache.delete(id);
+        cleaned++;
+      }
+    });
+    console.log(`[apiImageService] Cleaned up ${cleaned} unused images`);
+  }
+
+  // Get memory usage stats
+  getMemoryStats() {
+    return {
+      cachedImages: this.imageCache.size,
+      activeUrls: this.imageUrls.size,
+      memoryEstimate: this.imageCache.size * 1024 * 1024 // Rough estimate: 1MB per image
+    };
   }
 
   async updateImageAnnotations(

@@ -156,8 +156,16 @@ class ApiClient {
   }
 
   // Image endpoints
-  async getProjectImages(projectId: string) {
-    return this.request<any[]>(`/projects/${projectId}/images`);
+  async getProjectImages(projectId: string, page: number = 1, limit: number = 20) {
+    const params = new URLSearchParams({
+      page: page.toString(),
+      limit: limit.toString()
+    });
+    return this.request<any[]>(`/projects/${projectId}/images?${params}`);
+  }
+
+  async getProjectImagesCount(projectId: string) {
+    return this.request<{ count: number }>(`/projects/${projectId}/images/count`);
   }
 
   async uploadImages(projectId: string, files: FileList | Iterable<File>) {

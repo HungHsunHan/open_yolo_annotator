@@ -45,6 +45,28 @@ export const KonvaAnnotationCanvas: React.FC<KonvaAnnotationCanvasProps> = ({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [stageSize, setStageSize] = useState({ width: 800, height: 600 });
   const [startPoint, setStartPoint] = useState<{ x: number; y: number } | null>(null);
+  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+
+  // Monitor container size
+  useEffect(() => {
+    const container = document.getElementById('annotation-canvas-container');
+    if (!container) return;
+
+    const resizeObserver = new ResizeObserver((entries) => {
+      if (entries[0]) {
+        const { width, height } = entries[0].contentRect;
+        setContainerSize({ width, height });
+      }
+    });
+
+    resizeObserver.observe(container);
+    
+    // Initial size
+    const rect = container.getBoundingClientRect();
+    setContainerSize({ width: rect.width, height: rect.height });
+
+    return () => resizeObserver.disconnect();
+  }, []);
 
   // Load image and calculate proper stage dimensions
   useEffect(() => {
@@ -55,23 +77,37 @@ export const KonvaAnnotationCanvas: React.FC<KonvaAnnotationCanvasProps> = ({
       console.log('[Canvas] Image loaded', { width: img.width, height: img.height });
       setImage(img);
       
-      // Calculate stage size to fit the scaled image properly
-      const scaledWidth = img.width * scale;
-      const scaledHeight = img.height * scale;
-      
-      // Add padding around the image
-      const padding = 40;
-      setStageSize({
-        width: scaledWidth + padding,
-        height: scaledHeight + padding,
-      });
+      // Calculate stage size based on container and image
+      if (containerSize.width > 0 && containerSize.height > 0) {
+        const scaledWidth = img.width * scale;
+        const scaledHeight = img.height * scale;
+        
+        // Use container size with some padding
+        const padding = 40;
+        const maxWidth = containerSize.width - padding;
+        const maxHeight = containerSize.height - padding;
+        
+        setStageSize({
+          width: Math.min(scaledWidth + padding, maxWidth + padding),
+          height: Math.min(scaledHeight + padding, maxHeight + padding),
+        });
+      } else {
+        // Fallback to image size
+        const scaledWidth = img.width * scale;
+        const scaledHeight = img.height * scale;
+        const padding = 40;
+        setStageSize({
+          width: scaledWidth + padding,
+          height: scaledHeight + padding,
+        });
+      }
     };
     
     img.onerror = () => {
       console.error('Failed to load image:', imageUrl);
     };
     img.src = imageUrl;
-  }, [imageUrl, scale, annotations.length, isDrawingMode, selectedClass]);
+  }, [imageUrl, scale, annotations.length, isDrawingMode, selectedClass, containerSize]);
 
   // Handle transformer selection
   useEffect(() => {
@@ -292,7 +328,7 @@ export const KonvaAnnotationCanvas: React.FC<KonvaAnnotationCanvasProps> = ({
   const imageOffsetY = image ? (stageSize.height - (image.height * scale)) / 2 : 0;
 
   return (
-    <div className="flex justify-center items-center bg-gray-100 p-4">
+    <div id="annotation-canvas-container" className="w-full h-full flex justify-center items-center bg-gray-100 p-4">
       <div className="border bg-white shadow-lg">
         <Stage
           ref={stageRef}

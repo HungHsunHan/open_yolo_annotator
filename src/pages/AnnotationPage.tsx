@@ -16,7 +16,8 @@ import {
   ZoomOut,
   RotateCcw,
   ArrowLeft,
-  Download
+  Download,
+  Maximize2
 } from "lucide-react";
 import { useFileManager, Annotation } from "@/features/file/hooks/useFileManager";
 import { useProject } from "@/features/project/hooks/useProject";
@@ -73,6 +74,7 @@ export const AnnotationPage = () => {
   const [drawingMode, setDrawingMode] = useState(false);
   const [scale, setScale] = useState(1);
   const [isSaving, setIsSaving] = useState(false);
+  const [autoFitScale, setAutoFitScale] = useState(true);
   
   // Ref to track if annotations are being loaded from API (to prevent infinite loop)
   const isLoadingAnnotationsRef = useRef(false);
@@ -207,19 +209,36 @@ export const AnnotationPage = () => {
 
   // Calculate initial scale when image changes
   useEffect(() => {
-    if (currentImage?.url) {
+    if (currentImage?.url && autoFitScale) {
       const img = new Image();
       img.onload = () => {
-        const maxWidth = window.innerWidth * 0.6;
-        const maxHeight = window.innerHeight * 0.7;
-        const scaleX = maxWidth / img.width;
-        const scaleY = maxHeight / img.height;
-        const newScale = Math.min(scaleX, scaleY, 1);
-        setScale(newScale);
+        // Get the actual canvas container size
+        const container = document.querySelector('.flex-1.overflow-auto') as HTMLElement;
+        if (container) {
+          const containerRect = container.getBoundingClientRect();
+          // Leave some padding for UI elements and scrollbars
+          const maxWidth = containerRect.width - 100;
+          const maxHeight = containerRect.height - 100;
+          
+          const scaleX = maxWidth / img.width;
+          const scaleY = maxHeight / img.height;
+          const newScale = Math.min(scaleX, scaleY, 1); // Don't scale up beyond original size
+          
+          console.log(`[AnnotationPage] Auto-fitting image: ${img.width}x${img.height} to container ${maxWidth}x${maxHeight}, scale: ${newScale}`);
+          setScale(newScale);
+        } else {
+          // Fallback calculation
+          const maxWidth = window.innerWidth * 0.6;
+          const maxHeight = window.innerHeight * 0.7;
+          const scaleX = maxWidth / img.width;
+          const scaleY = maxHeight / img.height;
+          const newScale = Math.min(scaleX, scaleY, 1);
+          setScale(newScale);
+        }
       };
       img.src = currentImage.url;
     }
-  }, [currentImage?.url]); // Use specific URL property instead of entire object
+  }, [currentImage?.url, autoFitScale]); // Use specific URL property instead of entire object
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -318,9 +337,43 @@ export const AnnotationPage = () => {
     }
   };
 
-  const handleZoomIn = () => setScale(Math.min(scale * 1.2, 3));
-  const handleZoomOut = () => setScale(Math.max(scale / 1.2, 0.5));
-  const handleReset = () => setScale(1);
+  const handleZoomIn = () => {
+    setAutoFitScale(false);
+    setScale(Math.min(scale * 1.2, 3));
+  };
+  
+  const handleZoomOut = () => {
+    setAutoFitScale(false);
+    setScale(Math.max(scale / 1.2, 0.5));
+  };
+  
+  const handleReset = () => {
+    setAutoFitScale(false);
+    setScale(1);
+  };
+
+  const handleFitToScreen = () => {
+    setAutoFitScale(true);
+    // Trigger recalculation
+    if (currentImage?.url) {
+      const img = new Image();
+      img.onload = () => {
+        const container = document.querySelector('.flex-1.overflow-auto') as HTMLElement;
+        if (container) {
+          const containerRect = container.getBoundingClientRect();
+          const maxWidth = containerRect.width - 100;
+          const maxHeight = containerRect.height - 100;
+          
+          const scaleX = maxWidth / img.width;
+          const scaleY = maxHeight / img.height;
+          const newScale = Math.min(scaleX, scaleY, 1);
+          
+          setScale(newScale);
+        }
+      };
+      img.src = currentImage.url;
+    }
+  };
 
   // Handle YOLO export for current image
   const handleDownloadYolo = useCallback(async () => {
@@ -583,8 +636,17 @@ export const AnnotationPage = () => {
             <Button variant="ghost" size="sm" onClick={handleZoomIn}>
               <ZoomIn className="h-4 w-4" />
             </Button>
-            <Button variant="ghost" size="sm" onClick={handleReset}>
+            <Button variant="ghost" size="sm" onClick={handleReset} title="Reset to 100%">
               <RotateCcw className="h-4 w-4" />
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={handleFitToScreen}
+              title="Fit to screen"
+              className={autoFitScale ? "bg-blue-100" : ""}
+            >
+              <Maximize2 className="h-4 w-4" />
             </Button>
           </div>
         </div>
