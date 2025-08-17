@@ -35,17 +35,17 @@ export const ClassManager = ({ projectClasses = ["object"], classDefinitions }: 
             {classes.map((cls, index) => (
               <div 
                 key={index} 
-                className="flex items-center justify-between p-2 bg-gray-100 rounded"
+                className="flex items-center justify-between p-2 rounded"
+                style={{ backgroundColor: cls.color }}
               >
                 <div className="flex items-center">
                   <Badge 
                     style={{ backgroundColor: cls.color }} 
-                    className="w-8 h-8 rounded-full mr-2"
-                  />
-                  <span className="font-mono w-8 text-center bg-gray-200 rounded mr-2">
+                    className="w-8 h-8 rounded-full mr-2 font-bold flex items-center justify-center text-black border-2 border-black"
+                  >
                     {cls.key}
-                  </span>
-                  <span>{cls.name}</span>
+                  </Badge>
+                  <span className="font-medium text-black">{cls.name}</span>
                 </div>
               </div>
             ))}

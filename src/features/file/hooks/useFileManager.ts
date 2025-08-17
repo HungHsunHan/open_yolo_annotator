@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { ClassDefinition } from "@/features/project/types";
-import { imageDBService, migrateFromLocalStorage, isMigrated } from "@/services/imageDb";
-import type { ImageFile } from "@/services/imageDb";
+import { apiImageService } from "@/services/apiImageService";
+import type { ImageFile } from "@/services/apiImageService";
 
 export interface Annotation {
   id: string;
@@ -18,20 +18,11 @@ export interface Annotation {
 
 export type { ImageFile };
 
-// Helper function to validate if project exists
+// Helper function to validate if project exists - now handled by API validation
 const validateProjectExists = (projectId: string): boolean => {
-  if (!projectId) return false;
-  
-  const savedProjects = localStorage.getItem('yolo-projects');
-  if (!savedProjects) return false;
-  
-  try {
-    const projects = JSON.parse(savedProjects);
-    return projects.some((p: { id: string }) => p.id === projectId);
-  } catch (e) {
-    console.error("Failed to validate project existence:", e);
-    return false;
-  }
+  // Projects are now managed by the API, so we just check if projectId is provided
+  // The API will handle project existence and access control validation
+  return !!projectId;
 };
 
 export const useFileManager = (projectId: string) => {
@@ -46,9 +37,7 @@ export const useFileManager = (projectId: string) => {
     if (projectId) {
       // Validate project exists before loading images
       if (!validateProjectExists(projectId)) {
-        const error = `Project ${projectId} does not exist or cannot be found`;
-        console.warn(error);
-        setLastError(error);
+        console.warn(`Invalid project ID: ${projectId}`);
         setImages([]);
         return;
       }
@@ -57,18 +46,8 @@ export const useFileManager = (projectId: string) => {
         try {
           setIsLoading(true);
           
-          // Check if data needs to be migrated from localStorage
-          const migrated = await isMigrated(projectId);
-          if (!migrated) {
-            console.log(`Attempting to migrate data for project ${projectId}...`);
-            const migrationResult = await migrateFromLocalStorage(projectId);
-            if (migrationResult) {
-              console.log(`Successfully migrated data for project ${projectId}`);
-            }
-          }
-          
-          // Load images from IndexedDB
-          const loadedImages = await imageDBService.getProjectImages(projectId);
+          // Load images from API
+          const loadedImages = await apiImageService.getProjectImages(projectId);
           setImages(loadedImages);
           
         } catch (error) {
@@ -97,7 +76,7 @@ export const useFileManager = (projectId: string) => {
     setLastError(null);
     
     try {
-      const uploadedImages = await imageDBService.uploadFiles(files, projectId);
+      const uploadedImages = await apiImageService.uploadFiles(files, projectId);
       setImages(prev => [...prev, ...uploadedImages]);
     } catch (error) {
       console.error('Error uploading files:', error);
@@ -109,7 +88,7 @@ export const useFileManager = (projectId: string) => {
 
   const updateImageStatus = async (imageId: string, status: ImageFile['status']) => {
     try {
-      await imageDBService.updateImageStatus(imageId, status);
+      await apiImageService.updateImageStatus(imageId, status);
       setImages(prev => prev.map(img => 
         img.id === imageId ? { ...img, status } : img
       ));
@@ -125,26 +104,39 @@ export const useFileManager = (projectId: string) => {
     ));
   };
 
-  const updateImageAnnotationData = async (imageId: string, annotationData: Annotation[]) => {
+  const updateImageAnnotationData = useCallback(async (imageId: string, annotationData: Annotation[]) => {
+    console.log(`[useFileManager] Updating annotation data for image ${imageId} with ${annotationData.length} annotations`);
+    
     try {
-      await imageDBService.updateImageAnnotations(imageId, annotationData);
+      await apiImageService.updateImageAnnotations(imageId, annotationData);
+      
+      // Update local state only after successful API call
       setImages(prev => prev.map(img => 
         img.id === imageId ? { 
           ...img, 
           annotations: annotationData.length,
           annotationData,
-          status: 'completed' // Update status based on annotations
+          status: annotationData.length > 0 ? 'completed' : 'pending' // Update status based on annotations
         } : img
       ));
+      
+      console.log(`[useFileManager] Successfully updated annotation data for image ${imageId}`);
+      
+      // Clear any previous errors
+      setLastError(null);
     } catch (error) {
-      console.error('Failed to update image annotations:', error);
-      setLastError('Failed to save annotations');
+      const errorMessage = error instanceof Error ? error.message : 'Failed to save annotations';
+      console.error(`[useFileManager] Failed to update image annotations for ${imageId}:`, error);
+      setLastError(errorMessage);
+      
+      // Re-throw error so calling components can handle it
+      throw error;
     }
-  };
+  }, []); // Empty dependency array since all dependencies are stable
 
   const deleteImage = async (imageId: string) => {
     try {
-      await imageDBService.deleteImage(imageId);
+      await apiImageService.deleteImage(imageId);
       setImages(prev => prev.filter(img => img.id !== imageId));
     } catch (error) {
       console.error('Failed to delete image:', error);
@@ -156,7 +148,7 @@ export const useFileManager = (projectId: string) => {
     if (!projectId) return;
     
     try {
-      await imageDBService.clearProjectImages(projectId);
+      await apiImageService.clearProjectImages(projectId);
       setImages([]);
     } catch (error) {
       console.error('Failed to clear all images:', error);
@@ -174,7 +166,7 @@ export const useFileManager = (projectId: string) => {
     setLastError(null);
     
     try {
-      const uploadedImages = await imageDBService.uploadDirectory(files, projectId, classDefinitions);
+      const uploadedImages = await apiImageService.uploadDirectory(files, projectId, classDefinitions);
       setImages(prev => [...prev, ...uploadedImages]);
     } catch (error) {
       console.error('Error uploading directory:', error);
@@ -186,7 +178,7 @@ export const useFileManager = (projectId: string) => {
 
   const getStorageStats = async () => {
     try {
-      return await imageDBService.getStorageInfo();
+      return await apiImageService.getStorageInfo();
     } catch (error) {
       console.error('Failed to get storage stats:', error);
       return { used: 0, total: 0, available: 0 };

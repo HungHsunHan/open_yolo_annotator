@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -15,15 +15,22 @@ import {
   ZoomIn,
   ZoomOut,
   RotateCcw,
-  ArrowLeft
+  ArrowLeft,
+  Download,
+  Maximize2
 } from "lucide-react";
 import { useFileManager, Annotation } from "@/features/file/hooks/useFileManager";
 import { useProject } from "@/features/project/hooks/useProject";
 import { ClassDefinition } from "@/features/project/types";
 import { useCollaboration } from "@/features/collaboration/hooks/useCollaboration";
+import { useSimpleCollaboration } from "@/features/collaboration/hooks/useSimpleCollaboration";
 import { ImageStatusIndicator } from "@/features/collaboration/components/ImageStatusIndicator";
 import { ConflictResolution } from "@/features/collaboration/components/ConflictResolution";
 import { useAuth } from "@/auth/AuthProvider";
+import { KonvaAnnotationCanvas } from "@/components/KonvaAnnotationCanvas";
+import { HTMLCanvasAnnotation } from "@/components/HTMLCanvasAnnotation";
+import { downloadYoloAnnotations } from "@/lib/yolo-parser";
+import { useToast } from "@/hooks/use-toast";
 
 
 const DEFAULT_COLORS = [
@@ -35,12 +42,21 @@ export const AnnotationPage = () => {
   const { imageId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { toast } = useToast();
   
   // Get project ID from URL
   const pathParts = window.location.pathname.split('/');
   const projectId = pathParts[2];
   
-  const { images, updateImageStatus, updateImageAnnotations, updateImageAnnotationData } = useFileManager(projectId || "");
+  // Add project-level access control
+  const {
+    canAccess: projectCanAccess,
+    accessDeniedReason: projectAccessDeniedReason,
+    activeUsers: projectActiveUsers,
+    isInitialized: projectCollaborationInitialized
+  } = useSimpleCollaboration(projectId || "");
+  
+  const { images, updateImageStatus, updateImageAnnotations, updateImageAnnotationData, isLoading } = useFileManager(projectId || "");
   const { projects } = useProject();
   const { 
     assignImage, 
@@ -52,22 +68,25 @@ export const AnnotationPage = () => {
   
   // Find the current project by ID
   const currentProject = projects.find(p => p.id === projectId);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const imageRef = useRef<HTMLImageElement>(null);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
-  const [isDrawing, setIsDrawing] = useState(false);
-  const [startPoint, setStartPoint] = useState({ x: 0, y: 0 });
-  const [currentBox, setCurrentBox] = useState<Annotation | null>(null);
   const [selectedClass, setSelectedClass] = useState(0);
   const [selectedAnnotation, setSelectedAnnotation] = useState<string | null>(null);
   const [drawingMode, setDrawingMode] = useState(false);
   const [scale, setScale] = useState(1);
-  const [imageLoaded, setImageLoaded] = useState(false);
-  const [imageDimensions, setImageDimensions] = useState({ width: 0, height: 0 });
+  const [isSaving, setIsSaving] = useState(false);
+  const [autoFitScale, setAutoFitScale] = useState(true);
+  
+  // Ref to track if annotations are being loaded from API (to prevent infinite loop)
+  const isLoadingAnnotationsRef = useRef(false);
 
   const currentImageIndex = images.findIndex(img => img.id === imageId);
-  const currentImage = images[currentImageIndex] || null;
   const totalImages = images.length;
+  
+  // Memoize currentImage to prevent unnecessary re-renders and dependency loops
+  const currentImage = useMemo(() => {
+    const index = images.findIndex(img => img.id === imageId);
+    return index >= 0 ? images[index] : null;
+  }, [images, imageId]);
 
   // Get classes from current project or use defaults
   const CLASSES: ClassDefinition[] = currentProject?.classDefinitions || 
@@ -85,11 +104,21 @@ export const AnnotationPage = () => {
 
   // Assign image and load existing annotations when image changes
   useEffect(() => {
-    if (currentImage && user) {
+    if (imageId && user && images.length > 0) {
+      // Find current image inside the effect to avoid circular dependencies
+      const image = images.find(img => img.id === imageId);
+      if (!image) return;
+      
+      // Prevent running if we're already in a loading state
+      if (isLoadingAnnotationsRef.current) {
+        console.log('[AnnotationPage] Skipping effect - already loading annotations');
+        return;
+      }
+      
       // Try to assign the image for annotation
-      assignImage(currentImage.id, 'annotation').then((success) => {
+      assignImage(image.id, 'annotation').then((success) => {
         if (!success) {
-          const status = getImageStatus(currentImage.id);
+          const status = getImageStatus(image.id);
           if (status.status === 'locked' && status.assignedUsername !== user.username) {
             // Show warning but still allow viewing
             console.warn(`Image is locked by ${status.assignedUsername}`);
@@ -97,149 +126,128 @@ export const AnnotationPage = () => {
         }
       });
       
-      // Load existing annotations
-      if (currentImage.annotationData) {
-        setAnnotations(currentImage.annotationData);
-      } else {
-        setAnnotations([]);
+      // Load existing annotations only if they haven't been loaded yet
+      const currentAnnotationsCount = annotations.length;
+      const cachedAnnotationsCount = image.annotationData?.length || 0;
+      
+      // Only load if annotations have changed or this is initial load
+      if (currentAnnotationsCount !== cachedAnnotationsCount) {
+        console.log(`[AnnotationPage] Loading annotations for image ${image.id}, has ${cachedAnnotationsCount} annotations`);
+        isLoadingAnnotationsRef.current = true;
+        
+        if (image.annotationData) {
+          console.log(`[AnnotationPage] Setting ${image.annotationData.length} annotations from cache`);
+          setAnnotations(image.annotationData);
+        } else {
+          console.log('[AnnotationPage] No cached annotations, setting empty array');
+          setAnnotations([]);
+        }
+        
+        // Reset flag after state update with sufficient time for async operations
+        setTimeout(() => {
+          isLoadingAnnotationsRef.current = false;
+          console.log('[AnnotationPage] Annotation loading flag reset - saves can now proceed');
+        }, 500);
       }
     }
     
     // Cleanup function to release assignment when leaving
     return () => {
-      if (currentImage && user) {
-        releaseAssignment(currentImage.id, false);
+      if (imageId && user) {
+        releaseAssignment(imageId, false);
       }
     };
-  }, [currentImage, user, assignImage, releaseAssignment, getImageStatus]);
+  }, [imageId, user, images.length, assignImage, releaseAssignment, getImageStatus]); // Use images.length instead of images array
 
   // Save annotations whenever they change (with debouncing to prevent loops)
   useEffect(() => {
-    if (currentImage && annotations.length >= 0) {
-      const timeoutId = setTimeout(() => {
-        updateImageAnnotationData(currentImage.id, annotations);
-        // Update status based on annotation count
-        const newStatus = annotations.length > 0 ? 'completed' : 'pending';
-        updateImageStatus(currentImage.id, newStatus);
-        
-        // Track annotation activity
-        if (user) {
-          updateActivity(currentImage.id, annotations.length);
-        }
-      }, 100);
-      
-      return () => clearTimeout(timeoutId);
+    // Don't save if annotations are being loaded from API (prevents infinite loop)
+    if (isLoadingAnnotationsRef.current) {
+      console.log('[AnnotationPage] Skipping save - annotations are being loaded');
+      return;
     }
-  }, [annotations, currentImage, user, updateActivity]);
-
-  // Load image and set canvas dimensions
-  useEffect(() => {
-    if (!currentImage || !canvasRef.current) return;
-
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const img = new Image();
-    img.onload = () => {
-      setImageDimensions({ width: img.width, height: img.height });
-      
-      // Calculate scale to fit image in viewport
-      const maxWidth = window.innerWidth * 0.6;
-      const maxHeight = window.innerHeight * 0.7;
-      const scaleX = maxWidth / img.width;
-      const scaleY = maxHeight / img.height;
-      const newScale = Math.min(scaleX, scaleY, 1);
-      
-      setScale(newScale);
-      
-      // Set canvas dimensions to match scaled image
-      canvas.width = img.width * newScale;
-      canvas.height = img.height * newScale;
-      
-      // Draw image
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      
-      setImageLoaded(true);
-      
-      // Redraw existing annotations
-      redrawAnnotations();
-    };
     
-    const redrawAnnotations = () => {
-      if (!ctx || !imageLoaded) return;
-      
-      // Clear and redraw image
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      if (imageRef.current) {
-        ctx.drawImage(imageRef.current, 0, 0, canvas.width, canvas.height);
+    // Don't save if we don't have a valid imageId
+    if (!imageId) {
+      console.log('[AnnotationPage] Skipping save - no imageId');
+      return;
+    }
+    
+    console.log(`[AnnotationPage] Scheduling save for ${annotations.length} annotations`);
+    
+    const timeoutId = setTimeout(async () => {
+      try {
+        setIsSaving(true);
+        console.log(`[AnnotationPage] Saving ${annotations.length} annotations for image ${imageId}`);
+        
+        // Only call updateImageAnnotationData - it handles status update internally
+        await updateImageAnnotationData(imageId, annotations);
+        
+        console.log(`[AnnotationPage] Successfully saved ${annotations.length} annotations`);
+      } catch (error) {
+        console.error('[AnnotationPage] Failed to save annotations:', error);
+        
+        // Show user-friendly error message
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+        console.warn(`Failed to save annotations: ${errorMessage}`);
+        
+        toast({
+          title: "Failed to save annotations",
+          description: `Error: ${errorMessage}. Please try again.`,
+          variant: "destructive",
+        });
+      } finally {
+        setIsSaving(false);
       }
-      
-      // Draw existing annotations
-      annotations.forEach(ann => {
-        ctx.strokeStyle = ann.color;
-        ctx.lineWidth = 2;
-        ctx.strokeRect(ann.x * scale, ann.y * scale, ann.width * scale, ann.height * scale);
-        
-        ctx.fillStyle = ann.color;
-        ctx.font = '14px Arial';
-        ctx.fillText(ann.className, ann.x * scale + 5, ann.y * scale + 20);
-      });
-    };
+    }, 800); // Increased debounce to 800ms to prevent excessive API calls
     
-    img.onerror = (e) => {
-      console.error("Failed to load image:", currentImage.name, e);
-      // Set a placeholder image
-      ctx.fillStyle = "#f0f0f0";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.fillStyle = "#999";
-      ctx.font = "20px Arial";
-      ctx.textAlign = "center";
-      ctx.fillText("Failed to load image", canvas.width/2, canvas.height/2);
+    return () => {
+      console.log('[AnnotationPage] Clearing save timeout');
+      clearTimeout(timeoutId);
     };
-    
-    img.src = currentImage.url;
-    imageRef.current = img;
-  }, [currentImage]);
+  }, [annotations, imageId, updateImageAnnotationData]); // Use imageId instead of currentImage?.id
 
-  // Redraw annotations when they change or scale changes
+  // Calculate initial scale when image changes
   useEffect(() => {
-    if (imageLoaded && canvasRef.current) {
-      const canvas = canvasRef.current;
-      const ctx = canvas.getContext('2d');
-      if (!ctx || !imageRef.current) return;
-      
-      // Clear and redraw image
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(imageRef.current, 0, 0, canvas.width, canvas.height);
-      
-      // Draw existing annotations
-      annotations.forEach(ann => {
-        const isSelected = selectedAnnotation === ann.id;
-        ctx.strokeStyle = isSelected ? '#ff0000' : ann.color;
-        ctx.lineWidth = isSelected ? 3 : 2;
-        ctx.strokeRect(ann.x * scale, ann.y * scale, ann.width * scale, ann.height * scale);
-        
-        // Add selection indicator
-        if (isSelected) {
-          ctx.fillStyle = 'rgba(255, 0, 0, 0.1)';
-          ctx.fillRect(ann.x * scale, ann.y * scale, ann.width * scale, ann.height * scale);
+    if (currentImage?.url && autoFitScale) {
+      const img = new Image();
+      img.onload = () => {
+        // Get the actual canvas container size
+        const container = document.querySelector('.flex-1.overflow-auto') as HTMLElement;
+        if (container) {
+          const containerRect = container.getBoundingClientRect();
+          // Leave some padding for UI elements and scrollbars
+          const maxWidth = containerRect.width - 100;
+          const maxHeight = containerRect.height - 100;
+          
+          const scaleX = maxWidth / img.width;
+          const scaleY = maxHeight / img.height;
+          const newScale = Math.min(scaleX, scaleY, 1); // Don't scale up beyond original size
+          
+          console.log(`[AnnotationPage] Auto-fitting image: ${img.width}x${img.height} to container ${maxWidth}x${maxHeight}, scale: ${newScale}`);
+          setScale(newScale);
+        } else {
+          // Fallback calculation
+          const maxWidth = window.innerWidth * 0.6;
+          const maxHeight = window.innerHeight * 0.7;
+          const scaleX = maxWidth / img.width;
+          const scaleY = maxHeight / img.height;
+          const newScale = Math.min(scaleX, scaleY, 1);
+          setScale(newScale);
         }
-        
-        ctx.fillStyle = isSelected ? '#ff0000' : ann.color;
-        ctx.font = '14px Arial';
-        ctx.fillText(ann.className, ann.x * scale + 5, ann.y * scale + 20);
-      });
+      };
+      img.src = currentImage.url;
     }
-  }, [annotations, selectedAnnotation, scale, imageLoaded]);
+  }, [currentImage?.url, autoFitScale]); // Use specific URL property instead of entire object
 
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
+      console.log(`[KeyDown] key="${e.key}" on AnnotationPage`);
       if (e.key >= '1' && e.key <= '9') {
         const classIndex = parseInt(e.key) - 1;
         if (classIndex < CLASSES.length) {
+          console.log(`[Shortcut] Select class index=${classIndex} name=${CLASSES[classIndex].name}`);
           setSelectedClass(classIndex);
         }
       }
@@ -247,34 +255,39 @@ export const AnnotationPage = () => {
       switch (e.key) {
         case 'w':
         case 'W':
-          setDrawingMode(!drawingMode);
+          setDrawingMode(prev => {
+            const next = !prev;
+            console.log(`[Shortcut] Toggle drawing mode: ${prev} -> ${next}`);
+            return next;
+          });
           setSelectedAnnotation(null);
-          setIsDrawing(false);
-          setCurrentBox(null);
           break;
         case 'ArrowLeft':
         case 'a':
         case 'A':
+          console.log('[Shortcut] Previous image');
           handlePrevious();
           break;
         case 'ArrowRight':
         case 'd':
         case 'D':
+          console.log('[Shortcut] Next image');
           handleNext();
           break;
         case ' ':
           e.preventDefault();
+          console.log('[Shortcut] Complete current image');
           handleComplete();
           break;
         case 'Delete':
         case 'Backspace':
+          console.log(`[Shortcut] Delete pressed, selectedAnnotation=${selectedAnnotation}`);
           if (selectedAnnotation) {
             handleDeleteAnnotation(selectedAnnotation);
           }
           break;
         case 'Escape':
-          setCurrentBox(null);
-          setIsDrawing(false);
+          console.log('[Shortcut] Escape pressed: clearing selection and exiting drawing mode');
           setSelectedAnnotation(null);
           setDrawingMode(false);
           break;
@@ -285,101 +298,13 @@ export const AnnotationPage = () => {
     return () => window.removeEventListener('keydown', handleKeyPress);
   }, [currentImageIndex, selectedAnnotation, drawingMode, images]);
 
-  const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current;
-    if (!canvas || !imageLoaded) return;
-
-    const rect = canvas.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / scale;
-    const y = (e.clientY - rect.top) / scale;
-
-    // Check if clicking on an existing annotation
-    const clickedAnnotation = annotations.find(ann => {
-      return x >= ann.x && x <= ann.x + ann.width &&
-             y >= ann.y && y <= ann.y + ann.height;
-    });
-
-    if (drawingMode) {
-      // Drawing mode: start drawing new annotation
-      if (!clickedAnnotation) {
-        setSelectedAnnotation(null);
-        setIsDrawing(true);
-        setStartPoint({ x, y });
-        setCurrentBox(null);
-      }
-    } else {
-      // Selection mode: select annotation for deletion
-      if (clickedAnnotation) {
-        setSelectedAnnotation(clickedAnnotation.id);
-      } else {
-        setSelectedAnnotation(null);
-      }
-      setIsDrawing(false);
-      setCurrentBox(null);
-    }
-  };
-
-  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isDrawing || !drawingMode || !canvasRef.current || !imageRef.current || !imageLoaded) return;
-
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const rect = canvas.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / scale;
-    const y = (e.clientY - rect.top) / scale;
-
-    const width = Math.abs(x - startPoint.x);
-    const height = Math.abs(y - startPoint.y);
-    const boxX = Math.min(x, startPoint.x);
-    const boxY = Math.min(y, startPoint.y);
-
-    // Redraw image and existing annotations
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(imageRef.current, 0, 0, canvas.width, canvas.height);
-
-    // Draw existing annotations
-    annotations.forEach(ann => {
-      ctx.strokeStyle = ann.color;
-      ctx.lineWidth = 2;
-      ctx.strokeRect(ann.x * scale, ann.y * scale, ann.width * scale, ann.height * scale);
-      
-      ctx.fillStyle = ann.color;
-      ctx.font = '14px Arial';
-      ctx.fillText(ann.className, ann.x * scale + 5, ann.y * scale + 20);
-    });
-
-    // Draw current box
-    ctx.strokeStyle = CLASSES[selectedClass].color;
-    ctx.lineWidth = 2;
-    ctx.strokeRect(boxX * scale, boxY * scale, width * scale, height * scale);
-    
-    ctx.fillStyle = CLASSES[selectedClass].color;
-    ctx.font = '14px Arial';
-    ctx.fillText(CLASSES[selectedClass].name, boxX * scale + 5, boxY * scale + 20);
-
-    setCurrentBox({
-      id: Date.now().toString(),
-      classId: selectedClass,
-      className: CLASSES[selectedClass].name,
-      color: CLASSES[selectedClass].color,
-      x: boxX,
-      y: boxY,
-      width,
-      height,
-    });
-  };
-
-  const handleMouseUp = () => {
-    if (drawingMode && currentBox && currentBox.width > 10 && currentBox.height > 10) {
-      setAnnotations([...annotations, currentBox]);
-    }
-    setIsDrawing(false);
-    setCurrentBox(null);
+  const handleAnnotationsChange = (newAnnotations: Annotation[]) => {
+    console.log(`[Annotations] Received ${newAnnotations.length} annotations from canvas`);
+    setAnnotations(newAnnotations);
   };
 
   const handleDeleteAnnotation = (id: string) => {
+    console.log(`[Annotations] Deleting annotation id=${id}`);
     setAnnotations(annotations.filter(a => a.id !== id));
     setSelectedAnnotation(null);
   };
@@ -412,9 +337,93 @@ export const AnnotationPage = () => {
     }
   };
 
-  const handleZoomIn = () => setScale(Math.min(scale * 1.2, 3));
-  const handleZoomOut = () => setScale(Math.max(scale / 1.2, 0.5));
-  const handleReset = () => setScale(1);
+  const handleZoomIn = () => {
+    setAutoFitScale(false);
+    setScale(Math.min(scale * 1.2, 3));
+  };
+  
+  const handleZoomOut = () => {
+    setAutoFitScale(false);
+    setScale(Math.max(scale / 1.2, 0.5));
+  };
+  
+  const handleReset = () => {
+    setAutoFitScale(false);
+    setScale(1);
+  };
+
+  const handleFitToScreen = () => {
+    setAutoFitScale(true);
+    // Trigger recalculation
+    if (currentImage?.url) {
+      const img = new Image();
+      img.onload = () => {
+        const container = document.querySelector('.flex-1.overflow-auto') as HTMLElement;
+        if (container) {
+          const containerRect = container.getBoundingClientRect();
+          const maxWidth = containerRect.width - 100;
+          const maxHeight = containerRect.height - 100;
+          
+          const scaleX = maxWidth / img.width;
+          const scaleY = maxHeight / img.height;
+          const newScale = Math.min(scaleX, scaleY, 1);
+          
+          setScale(newScale);
+        }
+      };
+      img.src = currentImage.url;
+    }
+  };
+
+  // Handle YOLO export for current image
+  const handleDownloadYolo = useCallback(async () => {
+    if (!currentImage || annotations.length === 0) {
+      alert('No annotations to export for this image');
+      return;
+    }
+
+    try {
+      // Get image dimensions
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      
+      img.onload = () => {
+        const imageWidth = img.width;
+        const imageHeight = img.height;
+        
+        // Get the base filename without extension
+        const baseName = currentImage.name.replace(/\.[^/.]+$/, "");
+        
+        // Download YOLO format file
+        downloadYoloAnnotations(
+          annotations,
+          imageWidth,
+          imageHeight,
+          `${baseName}.txt`
+        );
+        
+        console.log(`Downloaded YOLO annotations for ${currentImage.name}`);
+      };
+      
+      img.onerror = () => {
+        console.error('Failed to load image for export');
+        alert('Failed to load image dimensions for export');
+      };
+      
+      img.src = currentImage.url;
+    } catch (error) {
+      console.error('Error exporting YOLO annotations:', error);
+      alert('Failed to export annotations');
+    }
+  }, [currentImage, annotations]);
+
+  // Check project-level access - redirect if denied
+  useEffect(() => {
+    if (projectCollaborationInitialized && !projectCanAccess && projectId) {
+      console.log('Project access denied, redirecting to project page');
+      navigate(`/project/${projectId}`, { replace: true });
+    }
+  }, [projectCollaborationInitialized, projectCanAccess, projectId, navigate]);
 
   if (!currentImage && images.length > 0) {
     // If we have images but current image not found, redirect to first image
@@ -422,6 +431,42 @@ export const AnnotationPage = () => {
       navigate(`/project/${projectId}/annotate/${images[0].id}`, { replace: true });
       return null;
     }
+  }
+
+  // Show loading state while images are being fetched
+  if (isLoading || !projectCollaborationInitialized) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold mb-4">Loading...</h1>
+          <p className="text-gray-600">Loading images and annotations</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Block access if project is locked
+  if (projectCollaborationInitialized && !projectCanAccess) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center max-w-md mx-auto">
+          <div className="w-20 h-20 mx-auto mb-4 bg-red-100 rounded-full flex items-center justify-center">
+            <ArrowLeft className="h-10 w-10 text-red-500" />
+          </div>
+          <h1 className="text-2xl font-bold mb-4">Project Access Denied</h1>
+          <p className="text-gray-600 mb-6">
+            {projectAccessDeniedReason === 'project_locked' 
+              ? `This project is currently being edited by ${projectActiveUsers.join(', ')}. Only one user can edit a project at a time.`
+              : 'You cannot access this project at the moment.'
+            }
+          </p>
+          <Button onClick={() => navigate(`/project/${projectId}`)}>
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back to Project
+          </Button>
+        </div>
+      </div>
+    );
   }
 
   if (!currentImage) {
@@ -514,12 +559,24 @@ export const AnnotationPage = () => {
           <div className="text-xs space-y-1 text-gray-600">
             <p className="font-medium text-green-600">W: Toggle drawing mode</p>
             <p>1-9: Select class</p>
-            <p>Click: {drawingMode ? 'Draw boxes' : 'Select annotation'}</p>
+            <p>Click: {drawingMode ? 'Draw boxes (min 5x5px)' : 'Select annotation'}</p>
             <p>A/D: Prev/Next</p>
             <p>Space: Complete</p>
             <p>Del: Delete selected</p>
             <p>Esc: Exit modes</p>
           </div>
+          
+          {!drawingMode && (
+            <div className="mt-3 p-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-700">
+              💡 Press <strong>W</strong> to enable drawing mode, then drag to create bounding boxes
+            </div>
+          )}
+          
+          {drawingMode && (
+            <div className="mt-3 p-2 bg-green-50 border border-green-200 rounded text-xs text-green-700">
+              🎯 Drawing mode active! Click and drag to create boxes (minimum 5x5 pixels)
+            </div>
+          )}
         </div>
 
         {/* Conflict Resolution */}
@@ -564,6 +621,11 @@ export const AnnotationPage = () => {
                 Annotation selected (press Del to delete)
               </span>
             )}
+            {isSaving && (
+              <span className="text-sm bg-yellow-100 text-yellow-800 px-2 py-1 rounded">
+                Saving...
+              </span>
+            )}
           </div>
           
           <div className="flex items-center space-x-2">
@@ -574,26 +636,34 @@ export const AnnotationPage = () => {
             <Button variant="ghost" size="sm" onClick={handleZoomIn}>
               <ZoomIn className="h-4 w-4" />
             </Button>
-            <Button variant="ghost" size="sm" onClick={handleReset}>
+            <Button variant="ghost" size="sm" onClick={handleReset} title="Reset to 100%">
               <RotateCcw className="h-4 w-4" />
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={handleFitToScreen}
+              title="Fit to screen"
+              className={autoFitScale ? "bg-blue-100" : ""}
+            >
+              <Maximize2 className="h-4 w-4" />
             </Button>
           </div>
         </div>
 
         {/* Canvas Area */}
-        <div className="flex-1 overflow-auto p-4">
-          <div className="flex justify-center items-center h-full">
-            <canvas
-              ref={canvasRef}
-              className={`border bg-white max-w-full max-h-full ${
-                drawingMode ? 'cursor-crosshair' : 'cursor-pointer'
-              }`}
-              style={{ maxWidth: '100%', maxHeight: '100%' }}
-              onMouseDown={handleMouseDown}
-              onMouseMove={handleMouseMove}
-              onMouseUp={handleMouseUp}
-            />
-          </div>
+        <div className="flex-1 overflow-auto">
+          <KonvaAnnotationCanvas
+            imageUrl={currentImage.url}
+            annotations={annotations}
+            onAnnotationsChange={handleAnnotationsChange}
+            selectedClass={CLASSES[selectedClass]}
+            isDrawingMode={drawingMode}
+            scale={scale}
+            classDefinitions={CLASSES}
+            selectedAnnotationId={selectedAnnotation}
+            onSelectAnnotation={setSelectedAnnotation}
+          />
         </div>
 
         {/* Bottom Controls */}
@@ -618,6 +688,18 @@ export const AnnotationPage = () => {
               <CheckCircle2 className="h-4 w-4 mr-1" />
               Complete
             </Button>
+            <Button variant="outline" onClick={() => navigate(`/project/${projectId}`)}>
+              Exit
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={handleDownloadYolo}
+              disabled={annotations.length === 0}
+              title={annotations.length === 0 ? "No annotations to export" : "Download YOLO annotations"}
+            >
+              <Download className="h-4 w-4" />
+            </Button>
           </div>
         </div>
       </div>
@@ -641,7 +723,7 @@ export const AnnotationPage = () => {
                   className="w-full h-full object-cover rounded"
                   onError={(e) => {
                     const target = e.target as HTMLImageElement;
-                    target.src = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMjQgMjQiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2NjYyIgc3Ryb2tlLXdpZHRoPSIyIj48cmVjdCB4PSIzIiB5PSIzIiB3aWR0aD0iMTgiIGhlaWdodD0iMTgiIHJ4PSIyIiByeT0iMiIvPjxjaXJjbGUgY3g9IjguNSIgY3k9IjguNSIgcj0iMS41Ii8+PHBhdGggZD0iTTIxIDE1bC01LTVMNSAyMSIvPjwvc3ZnPg==";
+                    target.src = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMjQgMjQiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2NjYyIgc3Ryb2tlLXdpZHRoPSIyIj48cmVjdCB4PSIzIiB5PSMzIiB3aWR0aD0iMTgiIGhlaWdodD0iMTgiIHJ4PSIyIiByeT0iMiIvPjxjaXJjbGUgY3g9IjguNSIgY3k9IjguNSIgcj0iMS41Ii8+PHBhdGggZD0iTTIxIDE1bC01LTVMNSAyMSIvPjwvc3ZnPg==";
                   }}
                 />
               </div>

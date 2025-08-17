@@ -82,6 +82,7 @@ export const CreateProjectDialog = ({
               value={projectName}
               onChange={(e) => setProjectName(e.target.value)}
               placeholder="Enter project name"
+              data-testid="project-name-input"
             />
           </div>
 
@@ -143,7 +144,7 @@ export const CreateProjectDialog = ({
             </AlertDescription>
           </Alert>
 
-          <Button onClick={handleCreate} className="w-full" disabled={!projectName || classes.length === 0}>
+          <Button onClick={handleCreate} className="w-full" disabled={!projectName || classes.length === 0} data-testid="save-project-button">
             Create Project
           </Button>
         </div>

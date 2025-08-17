@@ -28,12 +28,18 @@ export const FileUploader = () => {
     
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       uploadFiles(e.dataTransfer.files);
+      // Reset file input to allow selecting the same files again
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     }
   };
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       uploadFiles(e.target.files);
+      // Reset file input to allow selecting the same files again
+      e.target.value = '';
     }
   };
 
@@ -41,8 +47,8 @@ export const FileUploader = () => {
     fileInputRef.current?.click();
   };
 
-  const imageFiles = files.filter(f => f.type === 'image');
-  const labelFiles = files.filter(f => f.type === 'label');
+  const imageFiles = files; // All files are images in this context
+  const labelFiles: any[] = []; // No label files in image upload context
 
   return (
     <Card>

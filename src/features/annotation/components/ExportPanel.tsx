@@ -5,10 +5,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Download, FileArchive, FileText } from "lucide-react";
 import { useFileManager, ImageFile, Annotation } from "@/features/file/hooks/useFileManager";
 import { YoloProject } from "@/features/project/types";
-import { imageDBService } from "@/services/imageDb";
+import { apiImageService } from "@/services/apiImageService";
 import JSZip from "jszip";
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
+import { annotationsToYoloString } from "@/lib/yolo-parser";
 
 interface ExportPanelProps {
   projectId?: string;
@@ -21,17 +22,18 @@ export const ExportPanel = ({ projectId, currentProject, images: passedImages }:
   const actualProjectId = currentProject?.id || projectId || "";
   const { images: hookImages } = useFileManager(actualProjectId);
   
-  // Use passed images if available, otherwise use hook images
-  const images = passedImages || hookImages;
+  // Always use hook images for the most up-to-date annotation data
+  // The hook ensures we have the latest annotations from the API
+  const images = hookImages;
   const { toast } = useToast();
   const [isExporting, setIsExporting] = useState(false);
   
   
 
-  // Get image blob from IndexedDB
+  // Get image blob from API service
   const getImageBlob = async (imageId: string): Promise<Blob | null> => {
     try {
-      return await imageDBService.getImageBlob(imageId);
+      return await apiImageService.getImageBlob(imageId);
     } catch (error) {
       console.error('Failed to get image blob:', error);
       return null;
@@ -126,7 +128,7 @@ nc: ${classNames.length}
       // Process each image and its annotations
       for (const image of images) {
         try {
-          // Get image blob from IndexedDB
+          // Get image blob from API service
           const imageBlob = await getImageBlob(image.id);
           if (!imageBlob) {
             console.error(`Failed to get blob for image ${image.name}`);
@@ -145,7 +147,7 @@ nc: ${classNames.length}
           
           // Generate annotation file
           if (image.annotationData && image.annotationData.length > 0) {
-            const yoloAnnotations = convertToYoloFormat(image.annotationData, dimensions.width, dimensions.height);
+            const yoloAnnotations = annotationsToYoloString(image.annotationData, dimensions.width, dimensions.height);
             labelsFolder!.file(`${baseName}.txt`, yoloAnnotations);
           } else {
             // Create empty annotation file for images without annotations
@@ -185,43 +187,95 @@ nc: ${classNames.length}
   };
 
   const exportLabels = async () => {
-    if (!currentProject || images.length === 0) {
+    if (!currentProject) {
       toast({
-        title: "Nothing to export",
-        description: "Please add images to your project before exporting.",
+        title: "No project selected",
+        description: "Please select a project before exporting.",
         variant: "destructive",
       });
       return;
     }
 
+    // Refresh images data to ensure we have the most up-to-date information
+    console.log('[ExportPanel] Refreshing image data before export...');
+    
     setIsExporting(true);
     
     try {
+      // Wait a moment for any pending state updates
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Check again after potential refresh
+      if (images.length === 0) {
+        toast({
+          title: "Nothing to export", 
+          description: "Please add images to your project before exporting.",
+          variant: "destructive",
+        });
+        return;
+      }
       const zip = new JSZip();
       const projectFolder = zip.folder(currentProject.name + '_labels');
       
       // Add classes.txt
       projectFolder!.file('classes.txt', generateClassesFile());
       
+      let processedCount = 0;
+      let skippedCount = 0;
+      
       // Process each image's annotations
       for (const image of images) {
         try {
+          // Validate image exists and has valid data
+          if (!image.id || !image.name) {
+            console.warn(`Skipping invalid image record:`, image);
+            skippedCount++;
+            continue;
+          }
+          
           if (image.annotationData && image.annotationData.length > 0) {
-            // Get image blob from IndexedDB
+            // Get image blob from API service
             const imageBlob = await getImageBlob(image.id);
             if (!imageBlob) {
-              console.error(`Failed to get blob for image ${image.name}`);
+              console.error(`Failed to get blob for image ${image.name} (ID: ${image.id}) - image may have been deleted`);
+              skippedCount++;
               continue;
             }
             
             const dimensions = await getImageDimensions(imageBlob);
             const baseName = image.name.replace(/\.[^/.]+$/, "");
-            const yoloAnnotations = convertToYoloFormat(image.annotationData, dimensions.width, dimensions.height);
-            projectFolder!.file(`${baseName}.txt`, yoloAnnotations);
+            const yoloAnnotations = annotationsToYoloString(image.annotationData, dimensions.width, dimensions.height);
+            
+            // Double-check we actually have valid YOLO content
+            if (yoloAnnotations.trim().length > 0) {
+              projectFolder!.file(`${baseName}.txt`, yoloAnnotations);
+              processedCount++;
+            } else {
+              console.warn(`Generated empty YOLO annotations for ${image.name}, skipping`);
+              skippedCount++;
+            }
+          } else {
+            console.log(`Skipping image ${image.name} - no annotations`);
+            skippedCount++;
           }
         } catch (error) {
           console.error(`Error processing annotations for ${image.name}:`, error);
+          // Provide more specific error context
+          if (error instanceof Error) {
+            console.error(`Error details: ${error.message}`);
+          }
+          skippedCount++;
         }
+      }
+      
+      // Check if we have any annotations to export
+      if (processedCount === 0) {
+        toast({
+          title: "No annotations to export",
+          description: `No images with annotations found in "${currentProject.name}". Please annotate some images first.`,
+          variant: "destructive",
+        });
+        return;
       }
       
       // Generate and download ZIP
@@ -237,14 +291,16 @@ nc: ${classNames.length}
       
       toast({
         title: "Export successful!",
-        description: `Labels for "${currentProject.name}" have been downloaded.`,
+        description: `Labels exported for ${processedCount} images from "${currentProject.name}".`,
       });
       
     } catch (error) {
-      console.error('Export failed:', error);
+      console.error('Export labels failed:', error);
       toast({
         title: "Export failed",
-        description: "Please try again or check your browser's download settings.",
+        description: error instanceof Error ? 
+          `Export error: ${error.message}` : 
+          "Please try again or check your browser's download settings.",
         variant: "destructive",
       });
     } finally {

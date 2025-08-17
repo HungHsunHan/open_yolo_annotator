@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { YoloProject, ClassDefinition } from "../types";
 import { useAuth } from "@/auth/AuthProvider";
+import { apiClient } from "@/lib/api";
 
 export const useProject = () => {
   const { user, isAdmin } = useAuth();
@@ -17,43 +18,41 @@ export const useProject = () => {
     });
   }, [allProjects, isAdmin, user?.id]);
 
-  // Load projects from localStorage on mount
+  // Load projects from API on mount
   useEffect(() => {
-    const savedProjects = localStorage.getItem('yolo-projects');
-    if (savedProjects) {
-      const parsedProjects = JSON.parse(savedProjects).map((p: any) => ({
-        ...p,
-        createdAt: new Date(p.createdAt),
-        updatedAt: new Date(p.updatedAt),
-        // For backward compatibility, add assignedUsers if missing
-        assignedUsers: p.assignedUsers || [],
-        // For backward compatibility, only generate classDefinitions if missing and classNames exist
-        classDefinitions: p.classDefinitions || (p.classNames ? p.classNames.map((name: string, index: number) => ({
-          id: index,
-          name: name,
-          color: ["#ef4444", "#3b82f6", "#22c55e", "#eab308", "#a855f7", "#f97316", "#06b6d4", "#84cc16"][index % 8],
-          key: (index + 1).toString()
-        })) : [])
-      }));
-      setAllProjects(parsedProjects);
+    const loadProjects = async () => {
+      if (!user) return;
       
-      // Set current project if exists
-      const savedCurrent = localStorage.getItem('yolo-current-project');
-      if (savedCurrent) {
-        const current = parsedProjects.find((p: YoloProject) => p.id === savedCurrent);
-        if (current) {
-          setCurrentProject(current);
+      try {
+        const projectsData = await apiClient.getProjects();
+        const parsedProjects = projectsData.map((p: any) => ({
+          ...p,
+          createdAt: new Date(p.created_at),
+          updatedAt: new Date(p.updated_at),
+          assignedUsers: p.assigned_users || [],
+          classNames: p.class_names || [],
+          classDefinitions: p.class_definitions || []
+        }));
+        setAllProjects(parsedProjects);
+        
+        // Set current project if exists
+        const savedCurrent = localStorage.getItem('yolo-current-project');
+        if (savedCurrent) {
+          const current = parsedProjects.find((p: YoloProject) => p.id === savedCurrent);
+          if (current) {
+            setCurrentProject(current);
+          }
         }
+      } catch (error) {
+        console.error('Failed to load projects:', error);
+        setAllProjects([]);
       }
-    }
-  }, []);
+    };
 
-  // Save projects to localStorage whenever they change
-  useEffect(() => {
-    if (allProjects.length > 0) {
-      localStorage.setItem('yolo-projects', JSON.stringify(allProjects));
-    }
-  }, [allProjects]);
+    loadProjects();
+  }, [user]);
+
+  // Projects are now saved on the server, no need for localStorage sync
 
   // Save current project to localStorage
   useEffect(() => {
@@ -64,112 +63,162 @@ export const useProject = () => {
     }
   }, [currentProject]);
 
-  const createProject = (name: string, classes: string[] = ["object"], classDefinitions?: ClassDefinition[]) => {
+  const createProject = async (name: string, classes: string[] = ["object"], classDefinitions?: ClassDefinition[]) => {
     if (!user) return null;
     
-    const newProject: YoloProject = {
-      id: crypto.randomUUID(),
-      name,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      createdBy: user.id,
-      assignedUsers: [user.id], // Creator is automatically assigned
-      directoryStructure: {
-        images: `/projects/${name}/images`,
-        labels: `/projects/${name}/labels`, 
-        classes: `/projects/${name}/classes.txt`
-      },
-      classNames: classes,
-      classDefinitions: classDefinitions
-    };
-    
-    const updatedProjects = [...allProjects, newProject];
-    setAllProjects(updatedProjects);
-    setCurrentProject(newProject);
-    
-    // Save immediately
-    localStorage.setItem('yolo-projects', JSON.stringify(updatedProjects));
-    localStorage.setItem('yolo-current-project', newProject.id);
-    
-    return newProject;
+    try {
+      const projectData = {
+        name,
+        class_names: classes,
+        class_definitions: classDefinitions || []
+      };
+      
+      const newProject = await apiClient.createProject(projectData);
+      
+      // Convert API response to match frontend interface
+      const formattedProject: YoloProject = {
+        ...newProject,
+        createdAt: new Date(newProject.created_at),
+        updatedAt: new Date(newProject.updated_at),
+        classNames: newProject.class_names,
+        classDefinitions: newProject.class_definitions,
+        assignedUsers: newProject.assigned_users,
+        directoryStructure: newProject.directory_structure
+      };
+      
+      const updatedProjects = [...allProjects, formattedProject];
+      setAllProjects(updatedProjects);
+      setCurrentProject(formattedProject);
+      
+      // Save current project reference locally
+      localStorage.setItem('yolo-current-project', formattedProject.id);
+      
+      return formattedProject;
+    } catch (error) {
+      console.error('Failed to create project:', error);
+      return null;
+    }
   };
 
   const setProject = (project: YoloProject | null) => {
     setCurrentProject(project);
   };
 
-  const updateProject = (projectId: string, updates: Partial<YoloProject>) => {
-    const updatedProjects = allProjects.map(p => 
-      p.id === projectId 
-        ? { ...p, ...updates, updatedAt: new Date() }
-        : p
-    );
-    setAllProjects(updatedProjects);
-    
-    if (currentProject?.id === projectId) {
-      setCurrentProject({ ...currentProject, ...updates, updatedAt: new Date() });
+  const updateProject = async (projectId: string, updates: Partial<YoloProject>) => {
+    try {
+      // Convert frontend format to API format
+      const apiUpdates = {
+        name: updates.name,
+        class_names: updates.classNames,
+        class_definitions: updates.classDefinitions
+      };
+      
+      const updatedProject = await apiClient.updateProject(projectId, apiUpdates);
+      
+      // Convert API response back to frontend format
+      const formattedProject: YoloProject = {
+        ...updatedProject,
+        createdAt: new Date(updatedProject.created_at),
+        updatedAt: new Date(updatedProject.updated_at),
+        classNames: updatedProject.class_names,
+        classDefinitions: updatedProject.class_definitions,
+        assignedUsers: updatedProject.assigned_users,
+        directoryStructure: updatedProject.directory_structure
+      };
+      
+      const updatedProjects = allProjects.map(p => 
+        p.id === projectId ? formattedProject : p
+      );
+      setAllProjects(updatedProjects);
+      
+      if (currentProject?.id === projectId) {
+        setCurrentProject(formattedProject);
+      }
+    } catch (error) {
+      console.error('Failed to update project:', error);
     }
-    
-    localStorage.setItem('yolo-projects', JSON.stringify(updatedProjects));
   };
 
-  const deleteProject = (projectId: string) => {
-    // Remove project from projects list
-    const updatedProjects = allProjects.filter(p => p.id !== projectId);
-    setAllProjects(updatedProjects);
-    
-    // Clear current project if it's the one being deleted
-    if (currentProject?.id === projectId) {
-      setCurrentProject(null);
-      localStorage.removeItem('yolo-current-project');
-    }
-    
-    // Update projects in localStorage
-    if (updatedProjects.length > 0) {
-      localStorage.setItem('yolo-projects', JSON.stringify(updatedProjects));
-    } else {
-      localStorage.removeItem('yolo-projects');
-    }
-    
-    // Clean up all project-related data (images, annotations, etc.)
-    localStorage.removeItem(`project-${projectId}-images`);
-    
-    // Clean up any other project-specific data that might exist
-    Object.keys(localStorage).forEach(key => {
-      if (key.startsWith(`project-${projectId}-`)) {
-        localStorage.removeItem(key);
+  const deleteProject = async (projectId: string) => {
+    try {
+      await apiClient.deleteProject(projectId);
+      
+      // Remove project from local state
+      const updatedProjects = allProjects.filter(p => p.id !== projectId);
+      setAllProjects(updatedProjects);
+      
+      // Clear current project if it's the one being deleted
+      if (currentProject?.id === projectId) {
+        setCurrentProject(null);
+        localStorage.removeItem('yolo-current-project');
       }
-    });
+      
+      // Clean up any local project-specific data that might exist
+      Object.keys(localStorage).forEach(key => {
+        if (key.startsWith(`project-${projectId}-`)) {
+          localStorage.removeItem(key);
+        }
+      });
+    } catch (error) {
+      console.error('Failed to delete project:', error);
+    }
   };
 
   // User assignment functions
-  const assignUserToProject = (projectId: string, userId: string): boolean => {
+  const assignUserToProject = async (projectId: string, userId: string): Promise<boolean> => {
     if (!isAdmin) return false;
     
-    const project = allProjects.find(p => p.id === projectId);
-    if (!project) return false;
-    
-    if (!project.assignedUsers.includes(userId)) {
-      const updatedAssignedUsers = [...project.assignedUsers, userId];
-      updateProject(projectId, { assignedUsers: updatedAssignedUsers });
+    try {
+      await apiClient.assignUserToProject(projectId, userId);
+      
+      // Update local state
+      const project = allProjects.find(p => p.id === projectId);
+      if (project && !project.assignedUsers.includes(userId)) {
+        const updatedProject = {
+          ...project,
+          assignedUsers: [...project.assignedUsers, userId]
+        };
+        const updatedProjects = allProjects.map(p => p.id === projectId ? updatedProject : p);
+        setAllProjects(updatedProjects);
+        
+        if (currentProject?.id === projectId) {
+          setCurrentProject(updatedProject);
+        }
+      }
+      
       return true;
+    } catch (error) {
+      console.error('Failed to assign user to project:', error);
+      return false;
     }
-    
-    return false;
   };
 
-  const unassignUserFromProject = (projectId: string, userId: string): boolean => {
+  const unassignUserFromProject = async (projectId: string, userId: string): Promise<boolean> => {
     if (!isAdmin) return false;
     
-    const project = allProjects.find(p => p.id === projectId);
-    if (!project) return false;
-    
-    // Prevent removing the creator
-    if (project.createdBy === userId) return false;
-    
-    const updatedAssignedUsers = project.assignedUsers.filter(id => id !== userId);
-    updateProject(projectId, { assignedUsers: updatedAssignedUsers });
-    return true;
+    try {
+      await apiClient.unassignUserFromProject(projectId, userId);
+      
+      // Update local state
+      const project = allProjects.find(p => p.id === projectId);
+      if (project) {
+        const updatedProject = {
+          ...project,
+          assignedUsers: project.assignedUsers.filter(id => id !== userId)
+        };
+        const updatedProjects = allProjects.map(p => p.id === projectId ? updatedProject : p);
+        setAllProjects(updatedProjects);
+        
+        if (currentProject?.id === projectId) {
+          setCurrentProject(updatedProject);
+        }
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('Failed to unassign user from project:', error);
+      return false;
+    }
   };
 
   const getProjectAssignments = (projectId: string): string[] => {

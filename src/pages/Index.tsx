@@ -27,14 +27,14 @@ const Index = () => {
           <p className="text-lg text-gray-600 mb-8">
             Create and manage your YOLO object detection datasets with ease
           </p>
-          <Button size="lg" onClick={() => setIsCreateDialogOpen(true)}>
+          <Button size="lg" onClick={() => setIsCreateDialogOpen(true)} data-testid="create-project-button">
             <Plus className="mr-2 h-5 w-5" />
             Create New Project
           </Button>
         </div>
 
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {projects.map((project) => (
+          {projects?.map((project) => (
             <Card
               key={project.id}
               className="cursor-pointer hover:shadow-lg transition-shadow"
@@ -48,16 +48,16 @@ const Index = () => {
               </CardHeader>
               <CardContent>
                 <p className="text-sm text-gray-600 mb-2">
-                  Created: {project.createdAt.toLocaleDateString()}
+                  Created: {project.createdAt?.toLocaleDateString() || 'Unknown'}
                 </p>
                 <p className="text-sm text-gray-600">
-                  Classes: {project.classNames.length}
+                  Classes: {project.classNames?.length || 0}
                 </p>
               </CardContent>
             </Card>
           ))}
           
-          {projects.length === 0 && (
+          {(!projects || projects.length === 0) && (
             <Card className="col-span-full">
               <CardContent className="text-center py-12">
                 <Folder className="mx-auto h-12 w-12 text-gray-400 mb-4" />

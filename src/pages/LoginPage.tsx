@@ -116,6 +116,7 @@ export const LoginPage = () => {
                       className="pl-10 h-12 border-gray-300 focus:border-blue-500 focus:ring-blue-500"
                       required
                       disabled={isLoading}
+                      data-testid="username-input"
                     />
                   </div>
                 </div>
@@ -133,6 +134,7 @@ export const LoginPage = () => {
                       className="pl-10 pr-10 h-12 border-gray-300 focus:border-blue-500 focus:ring-blue-500"
                       required
                       disabled={isLoading}
+                      data-testid="password-input"
                     />
                     <Button
                       type="button"
@@ -184,6 +186,7 @@ export const LoginPage = () => {
                   type="submit" 
                   className="w-full h-12 bg-blue-600 hover:bg-blue-700 focus:ring-blue-500 font-medium" 
                   disabled={isLoading}
+                  data-testid="login-button"
                 >
                   {isLoading ? (
                     <div className="flex items-center">

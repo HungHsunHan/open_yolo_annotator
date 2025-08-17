@@ -157,24 +157,52 @@ const SettingsPage = () => {
 
             <Separator />
 
-            {/* Theme Preview */}
+            {/* Enhanced Theme Preview */}
             <div className="space-y-3">
               <Label>Theme Preview</Label>
               <div className="grid grid-cols-3 gap-3">
                 {[
-                  { name: "Light", value: "light", bgClass: "bg-white", textClass: "text-gray-900" },
-                  { name: "Dark", value: "dark", bgClass: "bg-gray-900", textClass: "text-white" },
-                  { name: "System", value: "system", bgClass: "bg-gradient-to-r from-white to-gray-900", textClass: "text-gray-600" }
+                  { 
+                    name: "Light", 
+                    value: "light", 
+                    preview: (
+                      <div className="w-full h-12 bg-white border-2 border-gray-200 rounded-md flex items-center justify-center">
+                        <div className="w-6 h-6 bg-blue-500 rounded-full"></div>
+                      </div>
+                    )
+                  },
+                  { 
+                    name: "Dark", 
+                    value: "dark", 
+                    preview: (
+                      <div className="w-full h-12 bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 border-2 border-purple-600/30 rounded-md flex items-center justify-center space-x-1">
+                        <div className="w-3 h-3 bg-blue-400 rounded-full"></div>
+                        <div className="w-3 h-3 bg-purple-400 rounded-full"></div>
+                        <div className="w-3 h-3 bg-cyan-400 rounded-full"></div>
+                      </div>
+                    )
+                  },
+                  { 
+                    name: "System", 
+                    value: "system", 
+                    preview: (
+                      <div className="w-full h-12 bg-gradient-to-r from-white via-gray-200 to-purple-900 border-2 border-gray-300 rounded-md flex items-center justify-center">
+                        <Monitor className="h-4 w-4 text-gray-600" />
+                      </div>
+                    )
+                  }
                 ].map((themeOption) => (
-                  <Button
-                    key={themeOption.value}
-                    variant={theme === themeOption.value ? "default" : "outline"}
-                    className="h-20 flex flex-col items-center justify-center gap-2"
-                    onClick={() => setTheme(themeOption.value as typeof theme)}
-                  >
-                    {getThemeIcon(themeOption.value)}
-                    <span className="text-xs">{themeOption.name}</span>
-                  </Button>
+                  <div key={themeOption.value} className="space-y-2">
+                    {themeOption.preview}
+                    <Button
+                      variant={theme === themeOption.value ? "default" : "outline"}
+                      className="w-full h-10 flex items-center justify-center gap-2"
+                      onClick={() => setTheme(themeOption.value as typeof theme)}
+                    >
+                      {getThemeIcon(themeOption.value)}
+                      <span className="text-xs">{themeOption.name}</span>
+                    </Button>
+                  </div>
                 ))}
               </div>
             </div>
