@@ -38,7 +38,7 @@ pytest --cov=. --cov-report=html
 **前端：**
 - 使用 ESLint 進行代碼檢查：`pnpm lint`
 - TypeScript 嚴格模式，無型別錯誤
-- 所有新功能需要 Playwright E2E 測試
+- 重要功能建議添加適當的測試
 - 遵循現有的 React + TypeScript 模式
 
 **後端：**
@@ -80,7 +80,6 @@ test: 增加使用者認證測試
 - ✅ ESLint 代碼風格檢查
 - ✅ TypeScript 編譯檢查
 - ✅ 前端建置驗證
-- ✅ Playwright E2E 測試
 - ✅ Python 語法檢查
 - ✅ pytest 單元測試
 - ✅ 測試覆蓋率報告
@@ -112,7 +111,7 @@ git push origin main
 - 遵循 `backend/services/` 中的服務層模式
 
 **測試策略：**
-- 前端：重要用戶流程的 E2E 測試
+- 前端：程式碼品質檢查和建置驗證
 - 後端：API 端點和業務邏輯的單元測試
 - 整合測試：資料庫操作和檔案處理
 
