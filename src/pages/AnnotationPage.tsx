@@ -417,14 +417,6 @@ export const AnnotationPage = () => {
     }
   }, [currentImage, annotations]);
 
-  if (!currentImage && images.length > 0) {
-    // If we have images but current image not found, redirect to first image
-    if (images.length > 0) {
-      navigate(`/project/${projectId}/annotate/${images[0].id}`, { replace: true });
-      return null;
-    }
-  }
-
   // Check project-level access - redirect if denied
   useEffect(() => {
     if (projectCollaborationInitialized && !projectCanAccess && projectId) {
@@ -432,6 +424,14 @@ export const AnnotationPage = () => {
       navigate(`/project/${projectId}`, { replace: true });
     }
   }, [projectCollaborationInitialized, projectCanAccess, projectId, navigate]);
+
+  if (!currentImage && images.length > 0) {
+    // If we have images but current image not found, redirect to first image
+    if (images.length > 0) {
+      navigate(`/project/${projectId}/annotate/${images[0].id}`, { replace: true });
+      return null;
+    }
+  }
 
   // Show loading state while images are being fetched
   if (isLoading || !projectCollaborationInitialized) {
