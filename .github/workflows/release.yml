@@ -1,0 +1,90 @@
+name: Release
+
+on:
+  push:
+    branches: [ main ]
+    
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    if: contains(github.event.head_commit.message, '[release]')
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v4
+      with:
+        version: '10.14.0'
+        
+    - name: Install dependencies
+      run: pnpm install --frozen-lockfile
+      
+    - name: Build frontend
+      run: pnpm build
+      
+    - name: Get version from commit message
+      id: get_version
+      run: |
+        # Extract version from commit message like "[release] v1.2.3"
+        VERSION=$(echo "${{ github.event.head_commit.message }}" | grep -oP '(?<=\[release\]\s)v?\d+\.\d+\.\d+' || echo "")
+        if [ -z "$VERSION" ]; then
+          # If no version specified, auto-increment patch version
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          VERSION=$(echo $LATEST_TAG | awk -F. '{$NF = $NF + 1;} 1' | sed 's/ /./g')
+        fi
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "Creating release for version: $VERSION"
+        
+    - name: Create Git tag
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git tag -a "${{ steps.get_version.outputs.version }}" -m "Release ${{ steps.get_version.outputs.version }}"
+        git push origin "${{ steps.get_version.outputs.version }}"
+        
+    - name: Generate changelog
+      id: changelog
+      run: |
+        PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+        if [ -n "$PREVIOUS_TAG" ]; then
+          CHANGES=$(git log $PREVIOUS_TAG..HEAD --oneline --no-merges | head -20)
+        else
+          CHANGES=$(git log --oneline --no-merges | head -20)
+        fi
+        
+        echo "changelog<<EOF" >> $GITHUB_OUTPUT
+        echo "## Changes in ${{ steps.get_version.outputs.version }}" >> $GITHUB_OUTPUT
+        echo "" >> $GITHUB_OUTPUT
+        echo "$CHANGES" | sed 's/^/- /' >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+        
+    - name: Create GitHub Release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ steps.get_version.outputs.version }}
+        release_name: Release ${{ steps.get_version.outputs.version }}
+        body: ${{ steps.changelog.outputs.changelog }}
+        draft: false
+        prerelease: false
+        
+    - name: Upload build artifacts to release
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./dist
+        asset_name: frontend-build-${{ steps.get_version.outputs.version }}.zip
+        asset_content_type: application/zip
