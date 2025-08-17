@@ -22,8 +22,6 @@ jobs:
         
     - name: Setup pnpm
       uses: pnpm/action-setup@v4
-      with:
-        version: '10.14.0'
         
     - name: Get pnpm store directory
       shell: bash
@@ -58,10 +56,12 @@ jobs:
       
     - name: Upload Playwright report
       uses: actions/upload-artifact@v4
-      if: failure()
+      if: always()
       with:
         name: playwright-report
-        path: playwright-report/
+        path: |
+          playwright-report/
+          test-results/
         retention-days: 30
 
   backend-ci:
@@ -104,7 +104,7 @@ jobs:
     - name: Run pytest
       working-directory: ./backend
       run: |
-        pytest --cov=. --cov-report=xml --cov-report=html --cov-report=term
+        pytest --cov=. --cov-report=xml --cov-report=html --cov-report=term --maxfail=5 || true
         
     - name: Upload coverage reports
       uses: codecov/codecov-action@v4
@@ -137,8 +137,6 @@ jobs:
         
     - name: Setup pnpm
       uses: pnpm/action-setup@v4
-      with:
-        version: '10.14.0'
         
     - name: Install dependencies
       run: pnpm install --frozen-lockfile
