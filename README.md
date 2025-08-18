@@ -20,6 +20,28 @@ A modern web application for creating and managing YOLO object detection annotat
 - **🎨 Modern UI**: Built with shadcn/ui components and Tailwind CSS
 - **📱 Responsive Design**: Works seamlessly across desktop and mobile devices
 
+## 📸 Web Interface
+
+### Login Page
+![Login Page](./docs/screenshots/login-page.png)
+*Secure authentication with role-based access control*
+
+### Dashboard
+![Dashboard](./docs/screenshots/dashboard.png)
+*Project overview and management interface*
+
+### Project Management
+![Project Management](./docs/screenshots/project-management.png)
+*Comprehensive project settings with image upload, class management, user assignments, and export options*
+
+### Annotation Interface
+![Annotation Interface](./docs/screenshots/annotation-page.png)
+*Professional YOLO annotation tool with bounding box drawing, class selection, and real-time collaboration features*
+
+### Export Success
+![Export Success](./docs/screenshots/export-success.png)
+*Seamless dataset export in YOLO format with complete project data*
+
 ## 🛠️ Tech Stack
 
 - **Frontend**: React 18 with TypeScript
